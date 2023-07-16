@@ -36,6 +36,8 @@ var gGameDraw = function() {
 	
 	gl1.imageDraw(gPlayerImage, gYou.x, gYou.y)
 	
+	glText.draw("hello world!", 44,55)
+	
 	gl1.render()
 }
 
