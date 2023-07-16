@@ -7,7 +7,6 @@ var glText = {
 		var x=0, y=7
 		for(var i=0; i<this.letters.length; i++) {
 			var letter = this.letters[i]
-			var size = this.sizeXGet(letter, 1)
 			this.letterImages[letter.charCodeAt(0)] = gl1.imageMake16(x, y)
 			x++
 			if(x > 11) {
@@ -30,7 +29,7 @@ var glText = {
 		return Math.ceil(size*scale)
 	},
 	letterSizeXBaseGet: function(letter) {
-		return 16
+		return 11+(letter=='U'||letter=='M')-(letter==' '||letter=='I'||letter=='!'||letter==':')*2
 	},
 	sizeXGet: function(text, scale, convertedAlready) {
 		if(!convertedAlready) text = this.iconsConvert(text)
@@ -72,7 +71,6 @@ var glText = {
 			var rgbnow = rgb
 			
 			var iconyadd = scale*3-5 | 0
-			if(scale==1.5)iconyadd-=3
 			
 			if(center) {
 				this.drawSizeX = this.sizeXGet(text,scale,1)
@@ -87,7 +85,7 @@ var glText = {
 				if(image) {
 					image.rgb = rgbnow
 					if(letter == ',')addy=3
-					if(scale >= 2) {
+					if(scale != 1) {
 						gl1.imageDraw(image, x-(letter=='j')*3*scale, y+addy, image.sizeX*(scale), image.sizeY*(scale))
 					} else
 						gl1.imageDraw(image, x, y+addy)
@@ -98,11 +96,10 @@ var glText = {
 						gl1.imageDraw(icon.image, x, y-2*scale, icon.sizeX*scale, icon.sizeY*scale)
 					}
 				}
-				x += (this.sizeXGet(letter,scale)-Math.floor(scale)*1) | 0
+				x += (this.sizeXGet(letter,scale)-scale) | 0
 			}
 			this.drawX = x
 			y += 16*scale | 0
-			if(scale>1 && scale<2)y-=5
 			x = startX
 		}
 	}
