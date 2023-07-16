@@ -11,7 +11,9 @@ var w = window,
 	gSize = 16,
 	gSizeX = 0,
 	gSizeY = 0,
-	gTilesY = 20,
+	gTilesYMin = 20,
+	gTilesX = 0,
+	gTilesY = 0,
 	gScale = 1,
 	gMobile,
 	gMouseDown,
@@ -27,6 +29,7 @@ var w = window,
 	gGrid=[],
 	gTileKinds=[],
 	gTileKindsById={},
+	gCloudImage,
 	u
 
 var gStateSet = (state) => {
@@ -87,7 +90,7 @@ var gInputUpdate = () => {
 var gGridIn = (x,y) => x>=0 && y>=0 && x<gGrid.length && y<gGrid[0].length
 
 var gGridDraw = () => {
-	var tilesX = gSizeX/gSize+1, tilesY = gTilesY+1
+	var tilesX = gTilesX + 1, tilesY = gTilesY+1
 	gCamX = gYou.x - gSizeX/2/gSize
 	gCamY = gYou.y - gSizeY/2/gSize
 	for(var y=0; y<tilesY; y++) {
@@ -111,6 +114,12 @@ var gGridDraw = () => {
 				gl1.imageDraw(kind.image, drawX, drawY)
 			}
 		}
+	}
+
+	var x = 0
+	while(x<gSizeX) {
+		gl1.imageDraw(gCloudImage,x,tilesY*gSize-29)
+		x += gCloudImage.sizeX
 	}
 }
 
@@ -160,7 +169,9 @@ w.onload = () => {
 	gMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 	gl1.setup(gGameCanvas, "tex.png")
 
-	var kind = {id:' ', name:'path',texX:3,texY:3}
+	gCloudImage = gl1.imageMake(0,232,24,24)
+
+	var kind = {id:' ', name:'path',texX:2.5,texY:2.5}
 	gTileKinds.push(kind)
 	var kind = {id:'.', name:'snow',texX:0,texY:0}
 	gTileKinds.push(kind)
@@ -217,12 +228,15 @@ t......      ......t
 	
 	w.onresize = _ => {
 		var screenRatio = innerWidth/innerHeight
+		gTilesY = gTilesYMin
 		gSizeY = gTilesY*gSize
-		gSizeX = gSizeY*screenRatio
+		gScale = innerHeight / gSizeY | 0
+		gSizeX = innerWidth / gScale | 0
+		gTilesX = gSizeX / gSize
+		
 		gGameCanvas.setAttribute('width', ~~gSizeX)
 		gGameCanvas.setAttribute('height', ~~gSizeY)
 
-		gScale = innerHeight / gSizeY
 		gGameCanvas.style.width = ~~(gSizeX*gScale)+'px'
 		gGameCanvas.style.height = ~~(gSizeY*gScale)+'px'
 		
