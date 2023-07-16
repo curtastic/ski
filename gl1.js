@@ -129,7 +129,7 @@ var gl1 = {
 		this.extension = extension
 		
 		// Set the gl canvas background color. Sky blue.
-		gl.clearColor(0.5, 0.7, 1.0, 1)
+		gl.clearColor(.933, .973, .996, 1)
 		
 		// Vertex shader source code.
 		// Each time we draw an image it will run this 6 times. Once for each point of the 2 triangles we use to make the image's rectangle area.
