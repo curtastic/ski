@@ -7,7 +7,7 @@ var w = window,
 	gStateLoops = 0,
 	gCamX = 0,
 	gCamY = 0,
-	gYou = {x:3,y:1,speed:.06},
+	gYou = {x:9,y:1,z:0,speed:.06,frame:0},
 	gSize = 16,
 	gSizeX = 0,
 	gSizeY = 0,
@@ -18,6 +18,7 @@ var w = window,
 	gMobile,
 	gMouseDown,
 	gMouseHit,
+	gMouseReleased,
 	gMouseClicked,
 	gMouseDragged,
 	gMouseTileX=0,
@@ -30,7 +31,10 @@ var w = window,
 	gTileKinds=[],
 	gTileKindsById={},
 	gCloudImage,
+	gTrails=[],
+	gGuys=[],
 	u
+gGuys.push(gYou)
 
 var gStateSet = (state) => {
 	gLog("stateSet() from",gState,"to",state)
@@ -44,23 +48,61 @@ var gGameUpdate = () => {
 	
 	gInputUpdate()
 
-	if(gMouseDown) {
-		gYou.y += guySpeedGet(gYou)
-		if(gHitGrid(gYou.x, gYou.y+1)) {
-			gYou.y -= guySpeedGet(gYou)
-		}
+	for(var guy of gGuys) {
+		guy.moved = 0
 
-		var goX = 0
-		if(gMouseTileX > gYou.x + 2) {
-			goX = 1
+		if(guy == gYou) {
+			if(gMouseDown) {
+				gYou.going = 1
+				if(gYou.z) {
+					gYou.z = 0
+					gYou.frame = 0
+				}
+				var goX = 0
+				if(gMouseTileX > gYou.x + 2) {
+					goX = 1
+				}
+				if(gMouseTileX < gYou.x - 1) {
+					goX = -1
+				}
+				if(goX) {
+					gYou.x += guySpeedGet(gYou)*goX
+					if(gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.4) || gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.9)) {
+						gYou.x -= guySpeedGet(gYou)*goX
+					} else {
+						guy.moved = 1
+					}
+				}
+			}
+			
+			if(gMouseReleased) {
+				gYou.z = 1
+			}
 		}
-		if(gMouseTileX < gYou.x - 1) {
-			goX = -1
+		if(guy.going)
+			gGuyGoDown(guy)
+		if(guy.moved) {
+			guy.frame+=.1
+			if(~~guy.frame>1)guy.frame-=2
 		}
-		if(goX) {
-			gYou.x += guySpeedGet(gYou)*goX
-			if(gHitGrid(gYou.x+(goX>0), gYou.y) || gHitGrid(gYou.x+(goX>0), gYou.y+.99)) {
-				gYou.x -= guySpeedGet(gYou)*goX
+	}
+}
+
+var gGuyGoDown = (guy) => {
+	var oldY =guy.y
+	guy.y += guySpeedGet(guy)
+	if(gHitGrid(guy.x+.2, guy.y+.9,guy.z) || gHitGrid(guy.x+.8, guy.y+.9,guy.z)) {
+		guy.y = oldY
+		guy.z = 0
+	} else {
+		guy.moved = 1
+		if(!guy.z && ~~guy.y != ~~oldY) {
+			if(guy.trailX == guy.x) {
+				gLog(~~guy.y,guy.trailY)
+				gTrails.push({x:guy.x, y:~~guy.y, loop:gloop.updates,first:~~guy.y!=guy.trailY+1})
+				guy.trailY = ~~guy.y
+			} else {
+				guy.trailX = guy.x
 			}
 		}
 	}
@@ -68,12 +110,12 @@ var gGameUpdate = () => {
 
 var guySpeedGet = (guy) => {
 	var kind = gTileGet(guy.x+.5, guy.y+.5)
-	return guy.speed / (1+(kind&&kind.id=='.'))
+	return guy.speed / (1+(kind&&kind.id=='.'&&!guy.z))
 }
 
-var gHitGrid = (x,y) => {
-	var kind = gTileGet(x,y)
-	return !kind || kind.solid
+var gHitGrid = (x,y,z) => {
+	var kind = gTileGet(x,y) || gTileKindsById.T
+	return z ? kind.id=='T' : kind.solid
 }
 
 var gTileGet = (x,y) => {
@@ -89,7 +131,7 @@ var gInputUpdate = () => {
 
 var gGridIn = (x,y) => x>=0 && y>=0 && x<gGrid.length && y<gGrid[0].length
 
-var gGridDraw = () => {
+var gGridDraw = (layer) => {
 	var tilesX = gTilesX + 1, tilesY = gTilesY+1
 	gCamX = gYou.x - gSizeX/2/gSize
 	gCamY = gYou.y - gSizeY/2/gSize
@@ -106,12 +148,13 @@ var gGridDraw = () => {
 			if(gGridIn(gridX, gridY)) {
 				var kind =  gGrid[gridX][gridY]
 			} else {
-				var kind =  gTileKindsById.t
+				var kind =  gTileKindsById.T
 			}
+			if((kind.id=='T')==layer)
 			if(kind.image) {
 				var drawX = x*gSize+addX
 				var drawY = y*gSize+addY
-				gl1.imageDraw(kind.image, drawX, drawY)
+				gl1.imageDraw(kind.image, drawX, drawY+kind.offsetY)
 			}
 		}
 	}
@@ -131,9 +174,26 @@ var gGameDraw = () => {
 		gStateSet('title')
 	}
 	
-	gGridDraw()
+	gGridDraw(0)
 	
-	gl1.imageDraw(gPlayerImage, (gYou.x-gCamX)*gSize, (gYou.y-gCamY)*gSize)
+	for(var i=-1,trail; trail=gTrails[++i];) {
+		var life = gloop.updates - trail.loop
+		gl1.imageDraw(life < 190 && !trail.first ? gPlayerTrailImage:gPlayerTrailImage2, (trail.x-gCamX)*gSize, (trail.y-gCamY)*gSize)
+		if(life > 200) {
+			gTrails.splice(i,1)
+			i--
+		}
+	}
+
+	for(var guy of gGuys) {
+		if(guy.z||1) {
+			gPlayerShadowImage.rgb = 0x33
+			gl1.imageDraw(gPlayerShadowImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize+7)
+		}
+		gl1.imageDraw(guy.z||~~guy.frame==1 ? gPlayerImage2:gPlayerImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7))
+	}
+	
+	gGridDraw(1)
 	
 	if(gState == 'title') {
 		var text = "BORN TO SKI!"
@@ -156,7 +216,7 @@ var gGameDraw = () => {
 
 	gl1.render()
 
-	gMouseClicked = gMouseHit = 0
+	gMouseClicked = gMouseHit = gMouseReleased = 0
 }
 
 var gMouseMove = () => {
@@ -170,6 +230,12 @@ w.onload = () => {
 	gl1.setup(gGameCanvas, "tex.png")
 
 	gCloudImage = gl1.imageMake(0,232,24,24)
+	
+	w.gPlayerShadowImage = gl1.imageMake16(11, 7)
+	w.gPlayerImage = gl1.imageMake16(10, 5)
+	w.gPlayerImage2 = gl1.imageMake16(11, 5)
+	w.gPlayerTrailImage = gl1.imageMake16(10, 4)
+	w.gPlayerTrailImage2 = gl1.imageMake16(11, 4)
 
 	var kind = {id:' ', name:'path',texX:2.5,texY:2.5}
 	gTileKinds.push(kind)
@@ -177,40 +243,44 @@ w.onload = () => {
 	gTileKinds.push(kind)
 	var kind = {id:'t', name:'treesmall',texX:6,texY:2,solid:1}
 	gTileKinds.push(kind)
-	var kind = {id:'T', name:'treebig',texX:6,texY:0,solid:1}
+	var kind = {id:'T', name:'treebig',texX:6,texY:0,texSizeY:2,solid:1,offsetY:-15}
+	gTileKinds.push(kind)
+	var kind = {id:'r', name:'rock',texX:9,texY:6,solid:1}
 	gTileKinds.push(kind)
 	
 	for(var kind of gTileKinds) {
 		gTileKindsById[kind.id] = kind
-		kind.image = gl1.imageMake(kind.texX*gSize, kind.texY*gSize, gSize, gSize)
+		kind.offsetY = kind.offsetY||0
+		kind.texSizeY = kind.texSizeY||1
+		kind.image = gl1.imageMake(kind.texX*gSize, kind.texY*gSize, gSize, gSize*kind.texSizeY)
 	}
 	var grid = `
-t......      ......t
-t......      ......t
-t......      ......t
-t......      ......t
-tt.....      ......t
-ttt....      ......t
-tttt...      ......t
-t......      ......t
-t.....       ......t
-t....     .  ......t
-t...     ..  ......t
-t...     ..  ......t
-t...     ..  ......t
-t....     .  ......t
-t.....       ......t
-t......      ......t
-tt.....      ......t
-ttt....      ......t
-t......      ......t
-t......      ......t
-t......      ......t
-t......      ......t
-t......      ......t
-t......      ......t
-t......      ......t
-t......      ......t
+......      ......
+......      ......
+......      ......
+......      ......
+t.....      ......
+tt....      ......
+ttt...rrrrrr......
+......rrrrrr......
+.....       ......
+....     T  ......
+...     T.  ......
+...    T..T ......
+...     Tt  ......
+....  T  t  ......
+.....      T......
+......      ......
+t.....      ......
+tt....      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
 `
 	grid = grid.split('\n')
 	grid.pop()
@@ -290,6 +360,7 @@ t......      ......t
 	
 	document.addEventListener("touchend", e => {
 		gMouseDown = 0
+		gMouseReleased = 1
 		gMouseClicked = !gMouseDragged
 		e.preventDefault()
 		return false
@@ -297,6 +368,7 @@ t......      ......t
 	
 	document.addEventListener("touchcancel", e => {
 		gMouseDown = 0
+		gMouseReleased = 1
 		e.preventDefault()
 		return false
 		
@@ -304,10 +376,9 @@ t......      ......t
 	
 	w.addEventListener("mouseup", e => {
 		gMouseDown = 0
+		gMouseReleased = 1
 		gMouseClicked = !gMouseDragged
 	})
-	
-	w.gPlayerImage = gl1.imageMake16(10, 5)
 	
 	onresize()
 	
