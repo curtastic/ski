@@ -7,11 +7,11 @@ var w = window,
 	gStateLoops = 0,
 	gCamX = 0,
 	gCamY = 0,
-	gYou = {x:9,y:1,z:0,speed:.06,frame:0},
+	gYou = {x:9,y:1,z:0,speed:0,speedMax:.09,angle:1.57,frame:0,trailY:0},
 	gSize = 16,
 	gSizeX = 0,
 	gSizeY = 0,
-	gTilesYMin = 20,
+	gTilesYMin = 19,
 	gTilesX = 0,
 	gTilesY = 0,
 	gScale = 1,
@@ -33,6 +33,7 @@ var w = window,
 	gCloudImage,
 	gTrails=[],
 	gGuys=[],
+	gPi = Math.PI,
 	u
 gGuys.push(gYou)
 
@@ -58,21 +59,25 @@ var gGameUpdate = () => {
 					gYou.z = 0
 					gYou.frame = 0
 				}
-				var goX = 0
-				if(gMouseTileX > gYou.x + 2) {
-					goX = 1
-				}
-				if(gMouseTileX < gYou.x - 1) {
-					goX = -1
-				}
-				if(goX) {
-					gYou.x += guySpeedGet(gYou)*goX
-					if(gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.4) || gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.9)) {
-						gYou.x -= guySpeedGet(gYou)*goX
-					} else {
-						guy.moved = 1
-					}
-				}
+				//gYou.angle += .02*(gYou.x-gMouseTileX)
+				var angle = Math.atan2(Math.max(0,gMouseTileY-gYou.y), gMouseTileX-gYou.x)
+				gLog(angle, gYou.angle)
+				if(angle < 0)angle = 0
+				if(angle > gPi)angle = gPi
+				gYou.angle += Math.sign(angle-gYou.angle)*.05
+			}
+			if(gYou.angle<gPi*.1)gYou.angle=gPi*.1
+			if(gYou.angle>gPi*.9)gYou.angle=gPi*.9
+			var oldX = gYou.x
+			var goX = Math.cos(gYou.angle)*guySpeedGet(gYou)
+			gYou.x += goX
+			if(gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.4, gYou.z) || gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.9, gYou.z)) {
+				gYou.x = oldX
+				//gYou.angle = gPi/2
+				//gYou.speed = 0
+				gYou.z = 0
+			} else {
+				guy.moved = 1
 			}
 			
 			if(gMouseReleased) {
@@ -89,21 +94,20 @@ var gGameUpdate = () => {
 }
 
 var gGuyGoDown = (guy) => {
-	var oldY =guy.y
-	guy.y += guySpeedGet(guy)
+	var oldY = guy.y
+	guy.y += Math.sin(guy.angle) * guySpeedGet(guy)
+	gYou.speed += .01
+	if(gYou.speed > gYou.speedMax)gYou.speed = gYou.speedMax
 	if(gHitGrid(guy.x+.2, guy.y+.9,guy.z) || gHitGrid(guy.x+.8, guy.y+.9,guy.z)) {
 		guy.y = oldY
 		guy.z = 0
+		//gYou.speed = 0
+		//gYou.angle = gPi/2
 	} else {
 		guy.moved = 1
-		if(!guy.z && ~~guy.y != ~~oldY) {
-			if(guy.trailX == guy.x) {
-				gLog(~~guy.y,guy.trailY)
-				gTrails.push({x:guy.x, y:~~guy.y, loop:gloop.updates,first:~~guy.y!=guy.trailY+1})
-				guy.trailY = ~~guy.y
-			} else {
-				guy.trailX = guy.x
-			}
+		if(!guy.z && guy.y >= guy.trailY+2/gSize) {
+			gTrails.push({x:~~(guy.x*gSize)/gSize, y:~~(guy.y*gSize)/gSize, loop:gloop.updates, first:guy.y >= guy.trailY+4/gSize})
+			guy.trailY = guy.y
 		}
 	}
 }
@@ -178,8 +182,8 @@ var gGameDraw = () => {
 	
 	for(var i=-1,trail; trail=gTrails[++i];) {
 		var life = gloop.updates - trail.loop
-		gl1.imageDraw(life < 190 && !trail.first ? gPlayerTrailImage:gPlayerTrailImage2, (trail.x-gCamX)*gSize, (trail.y-gCamY)*gSize)
-		if(life > 200) {
+		gl1.imageDraw(!trail.first ? gPlayerTrailImage:gPlayerTrailImage2, (trail.x-gCamX)*gSize, (trail.y-gCamY)*gSize)
+		if(gCamY > trail.y) {
 			gTrails.splice(i,1)
 			i--
 		}
@@ -206,10 +210,10 @@ var gGameDraw = () => {
 			glText.draw(text[i], x,y,scale,1)
 			x += glText.sizeXGet(text[i])*scale
 		}
-		glText.draw((gMobile?"Click":"Click")+" and hold!", gSizeX/2,145,1,1)
+		glText.draw((gMobile?"Press":"Click")+" and hold!", gSizeX/2,145,1,1)
 		glText.draw("Let go to jump!", gSizeX/2,165,1,1)
 		glText.draw("Get ready!", gSizeX/2,222,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
-		if(gMouseClicked||1) {
+		if(gMouseDown||location.host=='localhost') {
 			gStateSet('playing')
 		}
 	}
@@ -234,8 +238,8 @@ w.onload = () => {
 	w.gPlayerShadowImage = gl1.imageMake16(11, 7)
 	w.gPlayerImage = gl1.imageMake16(10, 5)
 	w.gPlayerImage2 = gl1.imageMake16(11, 5)
-	w.gPlayerTrailImage = gl1.imageMake16(10, 4)
-	w.gPlayerTrailImage2 = gl1.imageMake16(11, 4)
+	w.gPlayerTrailImage = gl1.imageMake(10*gSize, 4*gSize,gSize,3)
+	w.gPlayerTrailImage2 = gl1.imageMake(11*gSize, 4*gSize,gSize,3)
 
 	var kind = {id:' ', name:'path',texX:2.5,texY:2.5}
 	gTileKinds.push(kind)
@@ -281,6 +285,46 @@ tt....      ......
 ......      ......
 ......      ......
 ......      ......
+t.....      ......
+tt....      ......
+...... TT   ......
+...... TT   ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+.......     ......
+.......    .......
+.......    .......
+.......   ........
+......    ........
+.....    ...TT....
+.....      TTT....
+......      T.....
+.......     ......
+........     .....
+.........    .....
+........T.   .....
+........T.   .....
+........T.   .....
+.........   ......
+........   .......
+........   .......
+........   .......
+........   .......
+........   .......
+........   .......
+........   .......
+........   .......
+........   .......
+........   .......
+.......    .......
+.....      .......
+....     .........
+..    ............
+..    ............
 `
 	grid = grid.split('\n')
 	grid.pop()
@@ -336,8 +380,7 @@ tt....      ......
 		gMouseDown = 1
 		gMouseHit = 1
 		gMouseDragged = 0
-		for(var touchI in e.changedTouches) {
-			var touch = e.changedTouches[touchI]
+		for(var touchI=-1,touch; touch=e.changedTouches[++touchI];) {
 			gMouseX = touch.clientX
 			gMouseY = touch.clientY
 		}
@@ -348,8 +391,7 @@ tt....      ......
 	}, {passive:false})
 	
 	document.addEventListener("touchmove", e => {
-		for(var touchI in e.changedTouches) {
-			var touch = e.changedTouches[touchI]
+		for(var touchI=-1,touch; touch=e.changedTouches[++touchI];) {
 			gMouseX = touch.clientX
 			gMouseY = touch.clientY
 		}

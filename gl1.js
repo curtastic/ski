@@ -331,8 +331,8 @@ gl1.imageMake16 = function(texX, texY) {
 }
 
 gl1.imageMake = function(texX, texY, sizeX, sizeY) {
-	if(!sizeX)sizeX=g.tileSizeX
-	if(!sizeY)sizeY=g.tileSizeY
+	if(!sizeX)sizeX=gSize
+	if(!sizeY)sizeY=gSize
 	
 	var image = {}
 	image.texX = texX
