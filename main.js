@@ -71,6 +71,17 @@ var gGameUpdate = () => {
 	if(gState == 'playing') {
 		for(var guy of gGuys) {
 			guy.moved = 0
+			if(guy.fell) {
+				guy.fell--
+				guy.y -= .1
+			}
+
+			if(guy.z) {
+				guy.z -= .005
+				if(guy.z < 0) {
+					guy.z = 0
+				}
+			}
 	
 			if(guy == gYou) {
 				if(gMouseDown) {
@@ -81,7 +92,7 @@ var gGameUpdate = () => {
 					}
 					//gYou.angle += .02*(gYou.x-gMouseTileX)
 					var angle = Math.atan2(Math.max(0,gMouseTileY-gYou.y), gMouseTileX-gYou.x)
-					gLog(angle, gYou.angle)
+					//gLog(angle, gYou.angle)
 					if(angle < 0)angle = 0
 					if(angle > gPi)angle = gPi
 					gYou.angle += Math.sign(angle-gYou.angle)*.05
@@ -94,21 +105,22 @@ var gGameUpdate = () => {
 				if(gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.4, gYou.z) || gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.9, gYou.z)) {
 					gYou.x = oldX
 					//gYou.angle = gPi/2
-					//gYou.speed = 0
+					gYou.speed *= .9
 					gYou.z = 0
 				} else {
 					guy.moved = 1
 				}
 				
-				if(gMouseReleased) {
-					gYou.z = 1
-				}
 			}
 			if(guy.going)
 				gGuyGoDown(guy)
 			if(guy.moved) {
 				guy.frame+=.1
 				if(~~guy.frame>1)guy.frame-=2
+			}
+			if(!gMouseDown && guy == gYou && !gYou.z && !gYou.fell) {
+				if(gYou.speed > .015)
+					gYou.z = 1
 			}
 		}
 	}
@@ -134,13 +146,17 @@ var gGuyGoDown = (guy) => {
 		
 	}
 
-	guy.speed += thrust
+	if(!guy.z)
+		guy.speed += thrust
 	if(guy.speed > guy.speedMax)guy.speed = guy.speedMax
 
 	
 	if(gHitGrid(guy.x+.2, guy.y+.9,guy.z) || gHitGrid(guy.x+.8, guy.y+.9,guy.z)) {
 		guy.y = oldY
 		guy.z = 0
+		guy.speed = 0
+		guy.y -= .1
+		guy.fell = 4
 		//guy.speed *= Math.abs(1-Math.sin(guy.angle))
 		//guy.angle = gPi/2
 	} else {
@@ -176,7 +192,7 @@ var gGuyGoDown = (guy) => {
 		}
 	}
 
-	if(!guy.z) {
+	if(guy.z < .5) {
 		var x1 = (guy.x)|0
 		var x2 = (guy.x+1)|0
 		var y1 = (guy.y)|0
@@ -195,7 +211,7 @@ var gGuyGoDown = (guy) => {
 
 var gHitGrid = (x,y,z) => {
 	var kind = gTileGet(x,y) || gTileKindsById.T
-	if(kind.id=='T' || kind.solid)
+	if(z ? kind.id=='T' : kind.solid)
 		return kind
 }
 
@@ -273,13 +289,13 @@ var gGameDraw = () => {
 	}
 
 	for(var guy of gGuys) {
-		if(guy.z == 0)gGuyDraw(guy)
+		if(!guy.z)gGuyDraw(guy)
 	}
 	
 	gGridDraw(1)
 	
 	for(var guy of gGuys) {
-		if(guy.z == 1)gGuyDraw(guy)
+		if(guy.z)gGuyDraw(guy)
 	}
 	
 	if(gState == 'title') {
@@ -540,6 +556,97 @@ var gReset = () => {
 	gYou.coins = 0
 	
 	var grid = `
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTT>    TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT    <TTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTtTTT>   TTTTTT
+TtTTTT      TTTTTT
+tTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTtT
+TTTTTT      TTTTTT
+TTTTTT   <TTTTTTTT
+TTTTTT      TTTTTT
+TTTTtT      TTtTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTTTT>  TTTTTT
+TTTTTTT     TTTTTT
+TTTtTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TtTTTT      TTTTTT
+TTTTTT  <TTTTTttTT
+TTTTTT    TTTTTTTT
+TTTTTT      TtTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTTTTT> TTTTTT
+TTTTTTTTTTt TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTrrrrrrTTTTTT
+TTTTTT    c TTTTTT
+TTTTTT    c TTTTTT
+TTTTTT      TTTTTT
+TTTTTT c    TTTTTT
+TTTTTTc     TTTTTT
+TTTTTTrrrrrrTTTTTT
+TTTTTTc     TTTTTT
+TTTTTTrrrrrrTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT         TTT
+TTTTTTrrrrrrT  TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrr   TTT
+TTTTTT         TTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
+......      ......
 ......      ......
 ......      ......
 ......      ......
@@ -601,7 +708,7 @@ tt....      ......
 ........   .......
 ........   .......
 ........   .......
-........   .......
+......     .......
 ...        .......
 ...        ....TTT
 ..         TTTTTTT
