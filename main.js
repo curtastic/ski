@@ -23,6 +23,7 @@ var w = window,
 	gMouseDown,
 	gMouseHit,
 	gMouseReleased,
+	gJumped,
 	gMouseClicked,
 	gMouseDragged,
 	gMouseTileX=0,
@@ -36,6 +37,12 @@ var w = window,
 	gTileKindsById={},
 	gCloudImage,
 	gTrails=[],
+	gGateGoodX=0,
+	gGateGoodY=0,
+	gGateGoodLoop=0,
+	gGateBadX=0,
+	gGateBadY=0,
+	gGateBadLoop=0,
 	gGuys=[],
 	gPi = Math.PI,
 	gStartTime = 0,
@@ -118,9 +125,12 @@ var gGameUpdate = () => {
 				guy.frame+=.1
 				if(~~guy.frame>1)guy.frame-=2
 			}
-			if(!gMouseDown && guy == gYou && !gYou.z && !gYou.fell) {
-				if(gYou.speed > .015)
+			if(gMouseDown)gJumped=0
+			if(!gMouseDown && guy == gYou && !gYou.z && !gYou.fell && !gJumped) {
+				if(gYou.speed > .015) {
 					gYou.z = 1
+					gJumped = 1
+				}
 			}
 		}
 	}
@@ -174,17 +184,29 @@ var gGuyGoDown = (guy) => {
 						if(guy.x > x) {
 							gGrid[x][y] = gTileKindsById['>good']
 							guy.gateGoods++
+							gGateGoodX = x
+							gGateGoodY = y
+							gGateGoodLoop = gloop.updates
 						} else {
 							gGrid[x][y] = gTileKindsById['>bad']
 							guy.gateBads++
+							gGateBadX = x
+							gGateBadY = y
+							gGateBadLoop = gloop.updates
 						}
 					} else if(kind.id == '<') {
 						if(guy.x < x) {
 							gGrid[x][y] = gTileKindsById['<good']
 							guy.gateGoods++
+							gGateGoodX = x
+							gGateGoodY = y
+							gGateGoodLoop = gloop.updates
 						} else {
 							gGrid[x][y] = gTileKindsById['<bad']
 							guy.gateBads++
+							gGateBadX = x
+							gGateBadY = y
+							gGateBadLoop = gloop.updates
 						}
 					}
 				}
@@ -232,6 +254,10 @@ var gGridDraw = (layer) => {
 	var tilesX = gTilesX + 1, tilesY = gTilesY+2
 	gCamX = gYou.x - gSizeX/2/gSize
 	gCamY = gYou.y - gSizeY/2/gSize
+	var addX = -(gCamX % 1) * gSize
+	var addY = -(gCamY % 1) * gSize
+	if(gCamX<0)addX-=gSize
+	if(gCamY<0)addY-=gSize
 	for(var y=0; y<tilesY; y++) {
 		for(var x=0; x<tilesX; x++) {
 			var gridX = x + gCamX
@@ -245,12 +271,23 @@ var gGridDraw = (layer) => {
 			}
 			if((kind.id=='T')==layer || kind.id=='c') {
 				if(kind.image) {
-					var addX = -(gCamX % 1) * gSize
-					var addY = -(gCamY % 1) * gSize
-					if(gCamX<0)addX-=gSize
-					if(gCamY<0)addY-=gSize
 					var drawX = x*gSize+addX
 					var drawY = y*gSize+addY
+					var gateLoops = gloop.updates - gGateGoodLoop
+					kind.image.rgb = 0xFFFFFF7F
+					if(gateLoops < 8) {
+						if(gGateGoodX == gridX && gGateGoodY == gridY) {
+							drawY -= gateLoops/2
+							kind.image.rgb = 0xFFFFFF7F+Math.floor(Math.sin(gateLoops/8*gPi)*22)
+						}
+					}
+					var gateLoops = gloop.updates - gGateBadLoop
+					if(gateLoops < 8) {
+						if(gGateBadX == gridX && gGateBadY == gridY) {
+							drawX += Math.sin(gateLoops/2)*2-1
+							kind.image.rgb = 0xFFFFFF7F+Math.floor(Math.sin(gateLoops/8*gPi)*22)
+						}
+					}
 					if(kind.id=='c' && !layer) {
 						gl1.imageDraw(gTileKindsById[' '].image, drawX, drawY)
 						gl1.imageDraw(gPlayerShadowImage, drawX, drawY+5)
@@ -262,11 +299,6 @@ var gGridDraw = (layer) => {
 		}
 	}
 
-	var x = 0
-	while(x<gSizeX) {
-		gl1.imageDraw(gCloudImage,x,(tilesY-2)*gSize-13)
-		x += gCloudImage.sizeX
-	}
 }
 
 var gGameDraw = () => {
@@ -299,8 +331,9 @@ var gGameDraw = () => {
 	}
 	
 	if(gState == 'title') {
+		gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
 		var text = "BORN TO SKI!"
-		var scale = 1.2
+		var scale = 1.4
 		var x = gSizeX/2-glText.sizeXGet(text)/2*scale
 		for (let i = 0; i < text.length; i++) {
 			var y = 55
@@ -312,7 +345,7 @@ var gGameDraw = () => {
 		glText.draw((gMobile?"Press":"Click")+" and hold!", gSizeX/2,145,1,1)
 		glText.draw("Let go to jump!", gSizeX/2,165,1,1)
 		glText.draw("Get ready!", gSizeX/2,222,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
-		if(gMouseDown||location.host=='localhost') {
+		if(gMouseDown||location.host=='localhost0') {
 			gStateSet('playing')
 		}
 	}
@@ -345,7 +378,9 @@ var gGameDraw = () => {
 	}
 
 	var time = gloop.time - gStartTime - gPauseTimeTotal
-	if(gState == 'paused') {
+	if(gState == 'title') {
+		time = 0
+	} else if(gState == 'paused') {
 		time -= gloop.time - gPauseTime
 	}
 	var sec = time/1000 | 0
@@ -354,12 +389,17 @@ var gGameDraw = () => {
 	if(sec.length<2)sec='0'+sec
 	glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
 
-	gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-33,1)
-	glText.draw(gYou.gateGoods, gSizeX-18, 2)
+	gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
+	glText.draw(gYou.gateGoods, gSizeX-17, 2)
 
-	gl1.imageDraw(gTileKindsById.c.image,gSizeX-33,19)
-	glText.draw(gYou.coins, gSizeX-18, 18)
+	gl1.imageDraw(gTileKindsById.c.image,gSizeX-19-glText.sizeXGet(gYou.coins),19)
+	glText.draw(gYou.coins, gSizeX-6, 18, 1,3)
 	
+	var x = 0
+	while(x<gSizeX) {
+		gl1.imageDraw(gCloudImage,x,gTilesY*gSize-13)
+		x += gCloudImage.sizeX
+	}
 
 	gl1.render()
 
@@ -368,7 +408,10 @@ var gGameDraw = () => {
 
 var gGuyDraw = (guy) => {
 	gl1.imageDraw(gPlayerShadowImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize+7)
-	gl1.imageDraw(guy.z||~~guy.frame==1 ? gPlayerImage2:gPlayerImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7))
+	var image = guy.z||~~guy.frame==1 ? gPlayerImage2:gPlayerImage
+	var add = guy.fell ? Math.floor(Math.sin(guy.fell/4*gPi)*22) : 0
+	image.rgb = 0xFFFFFF7F+add
+	gl1.imageDraw(image, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7))
 }
 
 var gMouseDownOnBox = (x,y,sizeX,sizeY) => {
@@ -411,7 +454,7 @@ w.onload = () => {
 	gTileKinds.push(kind)
 	var kind = {id:'.', name:'snow',texX:0,texY:0}
 	gTileKinds.push(kind)
-	var kind = {id:'t', name:'treesmall',texX:6,texY:2,solid:1}
+	var kind = {id:'t', name:'treesmall',texX:6,texY:2,solid:1,offsetY:-3}
 	gTileKinds.push(kind)
 	var kind = {id:'T', name:'treebig',texX:6,texY:0,texSizeY:2,solid:1,offsetY:-15}
 	gTileKinds.push(kind)
@@ -544,7 +587,7 @@ w.onload = () => {
 
 var gReset = () => {
 	gYou.x = 9
-	gYou.y = 1
+	gYou.y = 2
 	gYou.z = 0
 	gYou.speed = 0
 	gYou.speedMax = .11
@@ -554,6 +597,7 @@ var gReset = () => {
 	gYou.gateGoods = 0
 	gYou.gateBads = 0
 	gYou.coins = 0
+	gJumped = 0
 	
 	var grid = `
 TTTTTT      TTTTTT
@@ -639,90 +683,102 @@ TTTTTT         TTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-t.....      ......
-tt....      ......
-ttt... >  rr......
-...... rc rr......
-.....       ......
-....   cc<  ......
-...     T.  ......
-...    T..T ......
-...     Tt  ......
-....  T  t  ......
-.....      T......
-......      ......
-t.....      ......
-tt....      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-t.....      ......
-tt....      ......
-...... TT   ......
-...... TT   ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-......      ......
-.......     ......
-.......    .......
-.......    .......
-.......   ........
-......    ........
-.....    ...TT....
-.....      TTT....
-......      T.....
-.......     ......
-........     .....
-.........    .....
-........T.   .....
-........T.   .....
-........T.   .....
-.........   ......
-........   .......
-........   .......
-........ c .......
-........c  .......
-........c  .......
-........ c .......
-........  c.......
-........   .......
-........   .......
-........   .......
-......     .......
-...        .......
-...        ....TTT
-..         TTTTTTT
-..  TTTTTTTTTTTTTT
-...       TTTT....
-...        .......
-......>    .......
-........   .......
-TTTT....   .......
-TTTTTT.    .......
-.....      .......
-....     .........
-..    ............
-..    ............
+TTTTTT T    TTTTTT
+TTTTTT     TTTTTTT
+TTTTTT      TTTTTT
+TTTTTT  T   TTTTTT
+TTTTTT      TTTTTT
+TTTTTTT     TTTTTT
+TTTTTT   T  TTTTTT
+TTTTTT    T TTTTTT
+TTTTTT T    TTTTTT
+TTTTTT      TTTTTT
+TTTTTT     TTTTTTT
+TTTTTT  T   TTTTTT
+TTTTTT      TTTTTT
+TTTTTT T    TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT    T TTTTTT
+TTTTTTT     TTTTTT
+TTTTTTTT    TTTTTT
+TTTTTTT     TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT  TT  TTTTTT
+TTTTTT  TT  TTTTTT
+TTTTTT      TTTTTT
+TTTTTT    TTTTTTTT
+TTTTTT    TTTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTT    TTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTTrrTTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTTrrTTTTTTTT
+TTTTTTTTrrTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTrrTTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT  <  TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT      TTTTTTT
+TTTTT   >  TTTTTTT
+TTTTT      TTTTTTT
+TTTTT      TTTTTTT
+TTTTT   <  TTTTTTT
+TTTTT      TTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT <    TTTTTTT
+TTTTT      TTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT   c TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT c   TTTTTTTT
+TTTTT    cTTTTTTTT
+TTTTT     TTTTTTTT
+TTTTTc    TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT  c  TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT    cTTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
 TTTTTTTTTTTTTTTTTT
 `
 	grid = grid.split('\n')
