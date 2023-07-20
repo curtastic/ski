@@ -89,7 +89,7 @@ var gGameUpdate = () => {
 				if(gYou.angle<gPi*.1)gYou.angle=gPi*.1
 				if(gYou.angle>gPi*.9)gYou.angle=gPi*.9
 				var oldX = gYou.x
-				var goX = Math.cos(gYou.angle)*guySpeedGet(gYou)
+				var goX = Math.cos(gYou.angle)*gYou.speed
 				gYou.x += goX
 				if(gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.4, gYou.z) || gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.9, gYou.z)) {
 					gYou.x = oldX
@@ -123,14 +123,26 @@ var gGameUpdate = () => {
 
 var gGuyGoDown = (guy) => {
 	var oldY = guy.y
-	guy.y += Math.sin(guy.angle) * guySpeedGet(guy)
-	gYou.speed += .001
-	if(gYou.speed > gYou.speedMax)gYou.speed = gYou.speedMax
+	guy.y += Math.sin(guy.angle) * guy.speed
+	var thrust = .001
+
+	var kind = gTileGet(guy.x+.5, guy.y+.5)
+	if(kind && kind.id=='.') {
+		thrust *= .5
+		if(guy.speed > guy.speedMax/2)
+			guy.speed = guy.speed*.5 + guy.speedMax/2*.5
+		
+	}
+
+	guy.speed += thrust
+	if(guy.speed > guy.speedMax)guy.speed = guy.speedMax
+
+	
 	if(gHitGrid(guy.x+.2, guy.y+.9,guy.z) || gHitGrid(guy.x+.8, guy.y+.9,guy.z)) {
 		guy.y = oldY
 		guy.z = 0
-		//gYou.speed *= Math.abs(1-Math.sin(guy.angle))
-		//gYou.angle = gPi/2
+		//guy.speed *= Math.abs(1-Math.sin(guy.angle))
+		//guy.angle = gPi/2
 	} else {
 		guy.moved = 1
 		if(!guy.z && guy.y >= guy.trailY+2/gSize) {
@@ -179,11 +191,6 @@ var gGuyGoDown = (guy) => {
 			}
 		}
 	}
-}
-
-var guySpeedGet = (guy) => {
-	var kind = gTileGet(guy.x+.5, guy.y+.5)
-	return guy.speed / (1+(kind&&kind.id=='.'&&!guy.z))
 }
 
 var gHitGrid = (x,y,z) => {
@@ -586,29 +593,40 @@ tt....      ......
 .........   ......
 ........   .......
 ........   .......
+........ c .......
+........c  .......
+........c  .......
+........ c .......
+........  c.......
 ........   .......
 ........   .......
 ........   .......
 ........   .......
+...        .......
+...        ....TTT
+..         TTTTTTT
+..  TTTTTTTTTTTTTT
+...       TTTT....
+...        .......
+......>    .......
 ........   .......
-........   .......
-........   .......
-........   .......
-.......    .......
+TTTT....   .......
+TTTTTT.    .......
 .....      .......
 ....     .........
 ..    ............
 ..    ............
+TTTTTTTTTTTTTTTTTT
 `
 	grid = grid.split('\n')
 	grid.pop()
 	grid.shift()
-	for (let x=0; x<=grid[0].length; x++) {
+	for (let x=0; x<=grid[0].length+1; x++) {
 		gGrid[x] = []
 	}
 	
 	for(var y=0; y<grid.length; y++) {
-		var row = 'T'+grid[y]
+		var row = 'T'+grid[y]+'T'
 		for (let x=0; x<row.length; x++) {
 			gGrid[x][y] = gTileKindsById[row[x]]
 		}
