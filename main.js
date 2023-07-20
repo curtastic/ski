@@ -124,18 +124,59 @@ var gGameUpdate = () => {
 var gGuyGoDown = (guy) => {
 	var oldY = guy.y
 	guy.y += Math.sin(guy.angle) * guySpeedGet(guy)
-	gYou.speed += .01
+	gYou.speed += .001
 	if(gYou.speed > gYou.speedMax)gYou.speed = gYou.speedMax
 	if(gHitGrid(guy.x+.2, guy.y+.9,guy.z) || gHitGrid(guy.x+.8, guy.y+.9,guy.z)) {
 		guy.y = oldY
 		guy.z = 0
-		//gYou.speed = 0
+		//gYou.speed *= Math.abs(1-Math.sin(guy.angle))
 		//gYou.angle = gPi/2
 	} else {
 		guy.moved = 1
 		if(!guy.z && guy.y >= guy.trailY+2/gSize) {
 			gTrails.push({x:~~(guy.x*gSize)/gSize, y:~~(guy.y*gSize)/gSize, loop:gloop.updates, first:guy.y >= guy.trailY+4/gSize})
 			guy.trailY = guy.y
+		}
+		if(guy == gYou && ~~guy.y != ~~oldY) {
+			var y = ~~guy.y
+			for(var x=0; x<gGrid.length; x++) {
+				var kind = gGrid[x][y]
+				if(kind) {
+					if(kind.id == '>') {
+						if(guy.x > x) {
+							gGrid[x][y] = gTileKindsById['>good']
+							guy.gateGoods++
+						} else {
+							gGrid[x][y] = gTileKindsById['>bad']
+							guy.gateBads++
+						}
+					} else if(kind.id == '<') {
+						if(guy.x < x) {
+							gGrid[x][y] = gTileKindsById['<good']
+							guy.gateGoods++
+						} else {
+							gGrid[x][y] = gTileKindsById['<bad']
+							guy.gateBads++
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if(!guy.z) {
+		var x1 = (guy.x)|0
+		var x2 = (guy.x+1)|0
+		var y1 = (guy.y)|0
+		var y2 = (guy.y+1)|0
+		for(var y=y1; y<=y2; y++) {
+			for(var x=x1; x<=x2; x++) {
+				var kind = gGrid[x][y]
+				if(kind && kind.id=='c') {
+					gGrid[x][y] = gTileKindsById[' ']
+					guy.coins++
+				}
+			}
 		}
 	}
 }
@@ -147,7 +188,8 @@ var guySpeedGet = (guy) => {
 
 var gHitGrid = (x,y,z) => {
 	var kind = gTileGet(x,y) || gTileKindsById.T
-	return z ? kind.id=='T' : kind.solid
+	if(kind.id=='T' || kind.solid)
+		return kind
 }
 
 var gTileGet = (x,y) => {
@@ -178,15 +220,21 @@ var gGridDraw = (layer) => {
 			} else {
 				var kind =  gTileKindsById.T
 			}
-			if((kind.id=='T')==layer)
-			if(kind.image) {
-				var addX = -(gCamX % 1) * gSize
-				var addY = -(gCamY % 1) * gSize
-				if(gCamX<0)addX-=gSize
-				if(gCamY<0)addY-=gSize
-				var drawX = x*gSize+addX
-				var drawY = y*gSize+addY
-				gl1.imageDraw(kind.image, drawX, drawY+kind.offsetY)
+			if((kind.id=='T')==layer || kind.id=='c') {
+				if(kind.image) {
+					var addX = -(gCamX % 1) * gSize
+					var addY = -(gCamY % 1) * gSize
+					if(gCamX<0)addX-=gSize
+					if(gCamY<0)addY-=gSize
+					var drawX = x*gSize+addX
+					var drawY = y*gSize+addY
+					if(kind.id=='c' && !layer) {
+						gl1.imageDraw(gTileKindsById[' '].image, drawX, drawY)
+						gl1.imageDraw(gPlayerShadowImage, drawX, drawY+5)
+					} else {
+						gl1.imageDraw(kind.id=='c' && gloop.updates%12<6 ?kind.image2: kind.image, drawX, drawY+kind.offsetY, u, u, kind.flipX)
+					}
+				}
 			}
 		}
 	}
@@ -218,14 +266,14 @@ var gGameDraw = () => {
 	}
 
 	for(var guy of gGuys) {
-		if(guy.z||1) {
-			gPlayerShadowImage.rgb = 0x33
-			gl1.imageDraw(gPlayerShadowImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize+7)
-		}
-		gl1.imageDraw(guy.z||~~guy.frame==1 ? gPlayerImage2:gPlayerImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7))
+		if(guy.z == 0)gGuyDraw(guy)
 	}
 	
 	gGridDraw(1)
+	
+	for(var guy of gGuys) {
+		if(guy.z == 1)gGuyDraw(guy)
+	}
 	
 	if(gState == 'title') {
 		var text = "BORN TO SKI!"
@@ -281,11 +329,23 @@ var gGameDraw = () => {
 	var min = sec/60 | 0
 	sec = sec % 60 + ''
 	if(sec.length<2)sec='0'+sec
-	glText.draw(min+":"+sec, gSizeX/2, 2, 1, 1)
+	glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
+
+	gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-33,1)
+	glText.draw(gYou.gateGoods, gSizeX-18, 2)
+
+	gl1.imageDraw(gTileKindsById.c.image,gSizeX-33,19)
+	glText.draw(gYou.coins, gSizeX-18, 18)
+	
 
 	gl1.render()
 
 	gMouseClicked = gMouseHit = gMouseReleased = 0
+}
+
+var gGuyDraw = (guy) => {
+	gl1.imageDraw(gPlayerShadowImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize+7)
+	gl1.imageDraw(guy.z||~~guy.frame==1 ? gPlayerImage2:gPlayerImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7))
 }
 
 var gMouseDownOnBox = (x,y,sizeX,sizeY) => {
@@ -311,6 +371,7 @@ w.onload = () => {
 	gCloudImage = gl1.imageMake(0,232,24,24)
 	
 	w.gPlayerShadowImage = gl1.imageMake16(11, 7)
+	gPlayerShadowImage.rgb = 0x33
 	w.gPlayerImage = gl1.imageMake16(10, 5)
 	w.gPlayerImage2 = gl1.imageMake16(11, 5)
 	w.gPlayerTrailImage = gl1.imageMake(10*gSize, 4*gSize,gSize,3)
@@ -332,6 +393,21 @@ w.onload = () => {
 	var kind = {id:'T', name:'treebig',texX:6,texY:0,texSizeY:2,solid:1,offsetY:-15}
 	gTileKinds.push(kind)
 	var kind = {id:'r', name:'rock',texX:9,texY:6,solid:1}
+	gTileKinds.push(kind)
+	var kind = {id:'>', name:'gateright',texX:7,texY:2,solid:1}
+	gTileKinds.push(kind)
+	var kind = {id:'<', name:'gateleft',texX:7,texY:2,solid:1,flipX:1}
+	gTileKinds.push(kind)
+	var kind = {id:'>bad', name:'gaterightbad',texX:8,texY:2,solid:1}
+	gTileKinds.push(kind)
+	var kind = {id:'>good', name:'gaterightgood',texX:9,texY:2,solid:1}
+	gTileKinds.push(kind)
+	var kind = {id:'<bad', name:'gateleftbad',texX:8,texY:2,solid:1,flipX:1}
+	gTileKinds.push(kind)
+	var kind = {id:'<good', name:'gateleftgood',texX:9,texY:2,solid:1,flipX:1}
+	gTileKinds.push(kind)
+	var kind = {id:'c', name:'coin',texX:14,texY:1}
+	kind.image2 = gl1.imageMake16(15,1)
 	gTileKinds.push(kind)
 	
 	for(var kind of gTileKinds) {
@@ -448,10 +524,13 @@ var gReset = () => {
 	gYou.y = 1
 	gYou.z = 0
 	gYou.speed = 0
-	gYou.speedMax = .09
+	gYou.speedMax = .11
 	gYou.angle = 1.57
 	gYou.frame = 0
 	gYou.trailY = 0
+	gYou.gateGoods = 0
+	gYou.gateBads = 0
+	gYou.coins = 0
 	
 	var grid = `
 ......      ......
@@ -460,10 +539,10 @@ var gReset = () => {
 ......      ......
 t.....      ......
 tt....      ......
-ttt...rrrrrr......
-......rrrrrr......
+ttt... >  rr......
+...... rc rr......
 .....       ......
-....     T  ......
+....   cc<  ......
 ...     T.  ......
 ...    T..T ......
 ...     Tt  ......

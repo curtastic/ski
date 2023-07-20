@@ -53,7 +53,7 @@ var glText = {
 		return text
 	},
 	draw: function(text, x, y, scale, center, rgb, rgbfix) {
-		text = text.toUpperCase()
+		text = (text+'').toUpperCase()
 		x = ~~x
 		y = ~~y
 		scale = scale || 1
