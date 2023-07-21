@@ -15,20 +15,31 @@ var glText = {
 			}
 		}
 	},
-	iconAdd: function(name, x, y, sizeX, sizeY) {
+	iconAdd: function(name, imageOrX, y, sizeX, sizeY) {
 		var code = String.fromCharCode(226+Object.keys(this.iconsByName).length)
-		this.iconsByCode[code] = this.iconsByName[name] = {
-			image: gl1.imageMake(x,y,sizeX,sizeY),
-			code,
-			sizeX,
-			sizeY
+		var icon = {code}
+		if(imageOrX.sizeX) {
+			icon.image = imageOrX
+			icon.offsetY = y||-1
+			icon.sizeX = imageOrX.sizeX
+			icon.sizeY = imageOrX.sizeY
+		} else {
+			icon.image = gl1.imageMake(imageOrX,y,sizeX,sizeY)
+			icon.sizeX = sizeX
+			icon.sizeY = sizeY
+			icon.offsetY = -1
 		}
+		this.iconsByCode[code] = this.iconsByName[name.toUpperCase()] = icon
 	},
 	letterSizeXget: function(letter, scale) {
 		size = this.letterSizeXBaseGet(letter)
 		return Math.ceil(size*scale)
 	},
 	letterSizeXBaseGet: function(letter) {
+		var icon = this.iconsByCode[letter]
+		if(icon) {
+			return icon.sizeX
+		}
 		return 11+(letter=='U'||letter=='M')-(letter==' '||letter=='I'||letter=='!'||letter==':')*2
 	},
 	sizeXGet: function(text, scale, convertedAlready) {
@@ -93,7 +104,7 @@ var glText = {
 					var icon = this.iconsByCode[letter]
 					if(icon) {
 						icon.image.rgb = rgbnow
-						gl1.imageDraw(icon.image, x, y-2*scale, icon.sizeX*scale, icon.sizeY*scale)
+						gl1.imageDraw(icon.image, x, (y+icon.offsetY)*scale, icon.sizeX*scale, icon.sizeY*scale)
 					}
 				}
 				x += (this.sizeXGet(letter,scale)-scale) | 0

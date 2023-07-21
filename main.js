@@ -48,6 +48,8 @@ var w = window,
 	gStartTime = 0,
 	gPauseTime = 0,
 	gPauseTimeTotal = 0,
+	gLevels = [],
+	gLevel,
 	u
 gGuys.push(gYou)
 
@@ -75,7 +77,7 @@ var gGameUpdate = () => {
 	
 	gInputUpdate()
 
-	if(gState == 'playing') {
+	if(gState == 'playing' || gState == 'done') {
 		for(var guy of gGuys) {
 			guy.moved = 0
 			if(guy.fell) {
@@ -124,9 +126,10 @@ var gGameUpdate = () => {
 			if(guy.moved) {
 				guy.frame+=.1
 				if(~~guy.frame>1)guy.frame-=2
+				if(gState == 'done')guy.frame=0
 			}
 			if(gMouseDown)gJumped=0
-			if(!gMouseDown && guy == gYou && !gYou.z && !gYou.fell && !gJumped) {
+			if(!gMouseDown && guy == gYou && !gYou.z && !gYou.fell && !gJumped && gState=='playing') {
 				if(gYou.speed > .015) {
 					gYou.z = 1
 					gJumped = 1
@@ -145,8 +148,9 @@ var gGameUpdate = () => {
 
 var gGuyGoDown = (guy) => {
 	var oldY = guy.y
+	if(gState == 'done')guy.speed*=.96
 	guy.y += Math.sin(guy.angle) * guy.speed
-	var thrust = .001
+	var thrust = gState == 'done'?0:.001
 
 	var kind = gTileGet(guy.x+.5, guy.y+.5)
 	if(kind && kind.id=='.') {
@@ -229,12 +233,32 @@ var gGuyGoDown = (guy) => {
 			}
 		}
 	}
+
+	if(!guy.done) {
+		var kind = gTileGet(guy.x+.5,guy.y+.5)
+		if(kind && kind.id=='=') {
+			guy.done = 1
+			if(guy == gYou) {
+				gStateSet('done')
+			}
+		}
+	}
 }
 
-var gHitGrid = (x,y,z) => {
+var gHitGrid = (x,y,z,onlyHere) => {
 	var kind = gTileGet(x,y) || gTileKindsById.T
-	if(z ? kind.id=='T' : kind.solid)
+	if(z ? kind.id=='T' : kind.solid) {
+		var pad = .2
+		for(var way=-1; way<2; way+=2) {
+			var add = way*pad
+			if(
+				!onlyHere &&
+				!gHitGrid(x+add,y,z,1) &&
+				(!gHitGrid(x,y-add,z,1) || !gHitGrid(x,y+add,z,1))
+			  )return
+		}
 		return kind
+	}
 }
 
 var gTileGet = (x,y) => {
@@ -288,6 +312,7 @@ var gGridDraw = (layer) => {
 							kind.image.rgb = 0xFFFFFF7F+Math.floor(Math.sin(gateLoops/8*gPi)*22)
 						}
 					}
+					gTileKindsById['='].image.rgb = 0x0FFF907f
 					if(kind.id=='c' && !layer) {
 						gl1.imageDraw(gTileKindsById[' '].image, drawX, drawY)
 						gl1.imageDraw(gPlayerShadowImage, drawX, drawY+5)
@@ -389,11 +414,11 @@ var gGameDraw = () => {
 	if(sec.length<2)sec='0'+sec
 	glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
 
-	gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
-	glText.draw(gYou.gateGoods, gSizeX-17, 2)
+	//gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
+	glText.draw("[gate]"+gYou.gateGoods, gSizeX-6, 3, 1, 3)
 
-	gl1.imageDraw(gTileKindsById.c.image,gSizeX-19-glText.sizeXGet(gYou.coins),19)
-	glText.draw(gYou.coins, gSizeX-6, 18, 1,3)
+	//gl1.imageDraw(gTileKindsById.c.image,gSizeX-19,19)
+	glText.draw("[coin]"+gYou.coins, gSizeX-6, 18, 1,3)
 	
 	var x = 0
 	while(x<gSizeX) {
@@ -460,6 +485,8 @@ w.onload = () => {
 	gTileKinds.push(kind)
 	var kind = {id:'r', name:'rock',texX:9,texY:6,solid:1}
 	gTileKinds.push(kind)
+	var kind = {id:'=', name:'finishline',texX:5,texY:4}
+	gTileKinds.push(kind)
 	var kind = {id:'>', name:'gateright',texX:7,texY:2,solid:1}
 	gTileKinds.push(kind)
 	var kind = {id:'<', name:'gateleft',texX:7,texY:2,solid:1,flipX:1}
@@ -482,6 +509,9 @@ w.onload = () => {
 		kind.texSizeY = kind.texSizeY||1
 		kind.image = gl1.imageMake(kind.texX*gSize, kind.texY*gSize, gSize, gSize*kind.texSizeY)
 	}
+
+	glText.iconAdd("coin", gTileKindsById.c.image, 1)
+	glText.iconAdd("gate", gTileKindsById['>good'].image)
 	
 	onresize = _ => {
 		var screenRatio = innerWidth/innerHeight
@@ -577,6 +607,8 @@ w.onload = () => {
 		gKeyDown[c] = 0
 		gKeyReleased[c] = 1
 	})
+
+	gLevelsSetup()
 	
 	onresize()
 
@@ -585,21 +617,11 @@ w.onload = () => {
 	gloop.start(gGameUpdate, gGameDraw)
 }
 
-var gReset = () => {
-	gYou.x = 9
-	gYou.y = 2
-	gYou.z = 0
-	gYou.speed = 0
-	gYou.speedMax = .11
-	gYou.angle = 1.57
-	gYou.frame = 0
-	gYou.trailY = 0
-	gYou.gateGoods = 0
-	gYou.gateBads = 0
-	gYou.coins = 0
-	gJumped = 0
-	
-	var grid = `
+var gLevelsSetup = () => {
+	var level = {}
+	gLevels.push(level)
+	level.name = "Woods"
+	level.grid = `
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -657,29 +679,16 @@ TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTTrrrrrrTTTTTT
-TTTTTT    c TTTTTT
-TTTTTT    c TTTTTT
 TTTTTT      TTTTTT
-TTTTTT c    TTTTTT
-TTTTTTc     TTTTTT
-TTTTTTrrrrrrTTTTTT
-TTTTTTc     TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
 TTTTTTrrrrrrTTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT         TTT
-TTTTTTrrrrrrT  TTT
-TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrr   TTT
-TTTTTT         TTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -714,30 +723,9 @@ TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTTT    TTTTTTT
 TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTTrrTTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTTccTTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTTrrTTTTTTTT
-TTTTTTTTrrTTTTTTTT
-TTTTTTTTccTTTTTTTT
-TTTTTTTTccTTTTTTTT
-TTTTTTTTccTTTTTTTT
-TTTTTTTTrrTTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTTccTTTTTTTT
-TTTTTTTTccTTTTTTTT
-TTTTTTTTccTTTTTTTT
+TTTTTTTTT TTTTTTTT
+TTTTTTTTT TTTTTTTT
+TTTTTTTTT TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
@@ -779,9 +767,202 @@ TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
+TTTTT=====TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
 TTTTTTTTTTTTTTTTTT
 `
-	grid = grid.split('\n')
+	
+	var level = {}
+	gLevels.push(level)
+	level.name = "Rocky"
+	level.grid = `
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTrrTT      TTTTTT
+TTTrTT      TTTTTT
+TTTTTT      TrTTTT
+TTTTTT      TrTTrT
+TTTTTT      TTTTrT
+TTTTTTcrcrcrTTTTTT
+TTTTrT      TTTTTT
+TTTTrT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTrcrcrcTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT r    TTTrrT
+TTTTTT      TTrTTT
+TTTTTT      TTTTTT
+TTTTTT c r cTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTrTTT     rTTTTTT
+TTTrrT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT  r   TrTTTT
+TTTTTT      TrTrTT
+TTTrTT      TTTTrT
+TTTTTT      TTTTTT
+TTTTTT    r TTTTTT
+TTTTrT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTr   r TTTTTT
+TTrTTT  r   TTTTTT
+TTTrTT     rTTTTTT
+TTrTTTr     TTTTTT
+TTTTTT   rr TTTTTT
+TTTTTT      TTTTTT
+TTTrTT rr  rTTTTTT
+TTTTTT  r  rTTTTTT
+TTTTTTr   rrTTTTTT
+TTTTTTrr rrrTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT > <  TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTrTTT      TTTTTT
+TTTTTT      TTrTTT
+TTTTTT      TTTrTT
+TTTTTT       TTTTT
+TTTTTTrrrrrrrTrTTT
+TTTrrTrrrrrrTTTrTT
+TTTTTT    c TTTTTT
+TTTTTT    c TTTTTT
+TTTTTT      TTTTTT
+TTTTTT c    TTTTTT
+TTTTTTc     TTTTTT
+TTTTTTrrrrrrTrTTTT
+TTTTrTc     TTrTTT
+TTTTrTrrrrrrTrrTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTrTT  TTTTTTTT
+TTTTTTTT  TrTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTrT
+TTTTTTTT  TTTTTTTT
+TTTTTTTTrrTTTTTTTT
+TTTTTrTT  TTTrTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTrTTTTTrrTTTTTTTT
+TTTTTTTTrrTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTrTTTrrTTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTT  TTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTTTTccTTTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TrTTTT
+TTTTTT      TrTrTT
+TTTTTT      TTTTTT
+TTTTTT       TTTTT
+TTTTTT         TTT
+TTTTTTrrrrrrT  TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrrTT TTT
+TTTTTTrrrrrr   TTT
+TTTTTT         TTT
+TTTTTT       TTTTT
+TTTTT       TTTTTT
+TTTTT       TTTTTT
+TTrTT      rTTTTTT
+TrrTT       TTTTTT
+TTTTT       TTTTTT
+TTTTT       TTTTTT
+TTTTT       TTTTTT
+TTTTTrrrr>  TTTTTT
+TTTTrrr     TTrrTT
+TTTTT       TTTTTT
+TTTTT       TTTrTT
+TTTTT       TTTTTT
+TTTTT   r   TTTTrT
+TrrTT       TTTTTT
+TTTTT      rTTTTTT
+TTTTT  <rrrrTTTTTT
+TTTTT    rrrTTTTTT
+TTTTT     rrTTTTTT
+TTTTT      rTTTTTT
+TTTTrr     rTTTTTT
+TTTTT       TTTTTT
+TTTTT       TrTTTT
+TTTTT r     TTTTTT
+TTTTT       TTTTTT
+TrTTT       TTTTTT
+TTTTT  r    TTTrTT
+TTTTT       TTTTTT
+TTTTT       TTTTTT
+TTTTT   r   TTTTTT
+TTTrT       TTTTTT
+TTTTT       TTTTTT
+TTTTT    r  TTTTTT
+TTTrT       TTTTTT
+TTTTT       TTTTTT
+TTTTT     r TTTTTT
+TTTrT       TTrTTT
+TTTTT       TrTTTT
+TTTTT      rTrTTTT
+TTTTT=====TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTTTTTTTTTTTTTTT
+`
+
+	gLevel = gLevels[1]
+}
+
+
+var gReset = () => {
+	gYou.x = 9
+	gYou.y = 4
+	gYou.z = 0
+	gYou.speed = 0
+	gYou.speedMax = .11
+	gYou.angle = 1.57
+	gYou.frame = 0
+	gYou.trailY = 0
+	gYou.gateGoods = 0
+	gYou.gateBads = 0
+	gYou.coins = 0
+	gJumped = 0
+	
+	var grid = gLevel.grid.split('\n')
 	grid.pop()
 	grid.shift()
 	for (let x=0; x<=grid[0].length+1; x++) {
