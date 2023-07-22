@@ -282,6 +282,7 @@ var gl1 = {
 				gl1.loadTexFromJsImage(image)
 				gl1.ready = true
 				glText.setup()
+				glLoaded()
 			}
 			image.src = texFileName
 		}

@@ -52,6 +52,10 @@ var w = window,
 	gScore = 0,
 	gLevels = [],
 	gLevel,
+	gMenuMusic,
+	gMusic,
+	gMusicPlayed,
+	gMusicPlaying,
 	u
 gGuys.push(gYou)
 
@@ -69,13 +73,36 @@ var gStateSet = (state) => {
 		}
 	}
 	
+	if(gState == 'paused') {
+		gMusicPlayed=0
+		gMusicPlayTry()
+	}
+	if(gState == 'playing') {
+		gMusic && gMusic.stop()
+	}
+	
 	gState = state
 	gStateLoop = gloop.updates
 	gStateLoops = 0
 }
 
+var gMusicPlayTry = () => {
+	var music = gState == 'playing' || gState == 'paused' ? gMusic : gMenuMusic
+	if(gMusicPlaying && music!=gMusicPlaying) {
+		gMusicPlaying.stop()
+		gMusicPlayed=0
+	}
+	if(!gMusicPlayed && music && music.audioBuffer) {
+		music.play()
+		gMusicPlaying = music
+		gMusicPlayed=1
+	}
+}
+
 var gGameUpdate = () => {
 	gStateLoops = gloop.updates - gStateLoop
+
+	gMusicPlayTry()
 	
 	gInputUpdate()
 
@@ -84,7 +111,7 @@ var gGameUpdate = () => {
 			guy.moved = 0
 			if(guy.fell) {
 				guy.fell--
-				guy.y -= .1
+				guy.y -= .12
 			}
 
 			if(guy.z) {
@@ -174,6 +201,7 @@ var gGuyGoDown = (guy) => {
 		guy.speed = 0
 		guy.y -= .1
 		guy.fell = 4
+		gSoundHit.play()
 		//guy.speed *= Math.abs(1-Math.sin(guy.angle))
 		//guy.angle = gPi/2
 	} else {
@@ -194,12 +222,14 @@ var gGuyGoDown = (guy) => {
 							gGateGoodX = x
 							gGateGoodY = y
 							gGateGoodLoop = gloop.updates
+							gSoundGateGood.play()
 						} else {
 							gGrid[x][y] = gTileKindsById['>bad']
 							guy.gateBads++
 							gGateBadX = x
 							gGateBadY = y
 							gGateBadLoop = gloop.updates
+							gSoundGateBad.play()
 						}
 					} else if(kind.id == '<') {
 						if(guy.x < x) {
@@ -208,12 +238,14 @@ var gGuyGoDown = (guy) => {
 							gGateGoodX = x
 							gGateGoodY = y
 							gGateGoodLoop = gloop.updates
+							gSoundGateGood.play()
 						} else {
 							gGrid[x][y] = gTileKindsById['<bad']
 							guy.gateBads++
 							gGateBadX = x
 							gGateBadY = y
 							gGateBadLoop = gloop.updates
+							gSoundGateBad.play()
 						}
 					}
 				}
@@ -232,6 +264,7 @@ var gGuyGoDown = (guy) => {
 				if(kind && kind.id=='c') {
 					gGrid[x][y] = gTileKindsById[' ']
 					guy.coins++
+					gSoundCoin.play()
 				}
 			}
 		}
@@ -243,6 +276,7 @@ var gGuyGoDown = (guy) => {
 			guy.done = 1
 			if(guy == gYou) {
 				gStateSet('done')
+				gSoundWin.play()
 			}
 		}
 	}
@@ -457,6 +491,22 @@ var gGameDraw = () => {
 			}
 		}
 		if(gState == 'title') {
+			gl1.drawRect(0,0,gSizeX,gSizeY,0xFFFFFF7F)
+			var text = "BORN TO SKI!"
+			var scale = 1.4
+			var x = gSizeX/2-glText.sizeXGet(text)/2*scale
+			for (let i = 0; i < text.length; i++) {
+				var y = 99
+				var addy = Math.sin(gloop.updates/5+i/2)
+				y += addy*4
+				glText.draw(text[i], x,y,scale,1)
+				x += glText.sizeXGet(text[i])*scale
+			}
+			if(gMouseDown||location.host=='localhost0') {
+				gStateSet('playing')
+			}
+		}
+		if(gState == 'levelstart') {
 			gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
 			var text = "BORN TO SKI!"
 			var scale = 1.4
@@ -468,6 +518,7 @@ var gGameDraw = () => {
 				glText.draw(text[i], x,y,scale,1)
 				x += glText.sizeXGet(text[i])*scale
 			}
+			glText.draw(gLevel.name+" Slope", gSizeX/2,145,1,1)
 			glText.draw((gMobile?"Press":"Click")+" and hold!", gSizeX/2,145,1,1)
 			glText.draw("Let go to jump!", gSizeX/2,165,1,1)
 			glText.draw("Get ready!", gSizeX/2,222,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
@@ -542,6 +593,11 @@ var gGameDraw = () => {
 	gl1.render()
 
 	gMouseClicked = gMouseHit = gMouseReleased = 0
+}
+
+var glLoaded = () => {
+	gMusic = gSoundLoad("rock.mp3")
+	gMenuMusic = gSoundLoad("menu.mp3?2")
 }
 
 var gGuyDraw = (guy) => {
@@ -657,6 +713,7 @@ w.onload = () => {
 		gMouseY = e.pageY
 		gMouseDownX = gMouseX
 		gMouseDownY = gMouseY
+		gMusicPlayTry()
 	})
 	
 	addEventListener("mousemove", e => {
@@ -675,6 +732,9 @@ w.onload = () => {
 		}
 		gMouseDownX = gMouseX
 		gMouseDownY = gMouseY
+		
+		gMusicPlayTry()
+		
 		e.preventDefault()
 		return false
 	}, {passive:false})
@@ -693,6 +753,9 @@ w.onload = () => {
 		gMouseDown = 0
 		gMouseReleased = 1
 		gMouseClicked = !gMouseDragged
+		
+		gMusicPlayTry()
+		
 		e.preventDefault()
 		return false
 	}, {passive:false})
@@ -700,6 +763,7 @@ w.onload = () => {
 	document.addEventListener("touchcancel", e => {
 		gMouseDown = 0
 		gMouseReleased = 1
+		
 		e.preventDefault()
 		return false
 		
@@ -716,6 +780,8 @@ w.onload = () => {
 		if(!gKeyDown[c]) {
 			gKeyHit[c] = gKeyDown[c] = 1
 		}
+		
+		gMusicPlayTry()
 	})
 	
 	addEventListener("keyup", e => {
@@ -725,7 +791,12 @@ w.onload = () => {
 	})
 
 	gLevelsSetup()
-	
+
+	w.gSoundHit = gSoundLoad([300,200,.05,.02,.02])
+	w.gSoundCoin = gSoundLoad([400, 400, .05, .01, .01,  650, 650, .2, .01, .16])
+	w.gSoundGateGood = gSoundLoad([300, 300, .05, .01, .01,  400, 400, .05, .01, .01,  500, 500, .05, .01, .01,])
+	w.gSoundGateBad = gSoundLoad([202,202,.1,.01,.02, 202,202,.1,.01,.02])
+	w.gSoundWin = gSoundLoad([202,202,.1,.01,.02, 262,262,.1,.01,.02, 402,402,.1,.01,.02, 502,502,.1,.01,.02, 602,602,.2,.01,.02, 552,552,.2,.01,.02, 652,652,.3,.01,.02])
 	onresize()
 
 	gReset()
@@ -947,6 +1018,7 @@ TTTrTT rr  rTTTTTT
 TTTTTT  r  rTTTTTT
 TTTTTTr   rrTTTTTT
 TTTTTTrr rrrTTTTTT
+TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT > <  TTTTTT
@@ -1193,6 +1265,7 @@ var gReset = () => {
 	gYou.coins = 0
 	gJumped = 0
 	gPauseTime = gPauseTimeTotal = 0
+	gMusicPlayed = 0
 	
 	var grid = gLevel.grid.split('\n')
 	grid.pop()
