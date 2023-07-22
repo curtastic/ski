@@ -3,6 +3,7 @@
 var w = window,
 	gLog = console.log.bind(console),
 	gState = 'loading',
+	gStateOld = '',
 	gStateLoop = 0,
 	gStateLoops = 0,
 	gCamX = 0,
@@ -54,7 +55,7 @@ var w = window,
 	gLevel,
 	gMenuMusic,
 	gMusic,
-	gMusicPlayed,
+	gAudioUnlocked,
 	gMusicPlaying,
 	u
 gGuys.push(gYou)
@@ -73,29 +74,43 @@ var gStateSet = (state) => {
 		}
 	}
 	
-	if(gState == 'paused') {
-		gMusicPlayed=0
-		gMusicPlayTry()
-	}
 	if(gState == 'playing') {
 		gMusic && gMusic.stop()
+		gMusicPlaying = u
 	}
-	
+
+	gStateOld = gState
 	gState = state
 	gStateLoop = gloop.updates
 	gStateLoops = 0
+	
+	if(gStateOld == 'paused') {
+		gMusicPlayTry()
+	}
 }
 
-var gMusicPlayTry = () => {
-	var music = gState == 'playing' || gState == 'paused' ? gMusic : gMenuMusic
+var gMusicGet = () => {
+	return gState == 'playing' || gState == 'levelstart' ? gMusic : gMenuMusic
+}
+
+var gMusicStop = () => {
+	var music = gMusicGet()
 	if(gMusicPlaying && music!=gMusicPlaying) {
 		gMusicPlaying.stop()
-		gMusicPlayed=0
+		gMusicPlaying = u
 	}
-	if(!gMusicPlayed && music && music.audioBuffer) {
+}
+
+var gMusicPlayTry = (click) => {
+	gMusicStop()
+	if(gState == 'paused') {
+		return
+	}
+	var music = gMusicGet()
+	if(!gMusicPlaying && music && music.audioBuffer && (click || gAudioUnlocked)) {
 		music.play()
 		gMusicPlaying = music
-		gMusicPlayed=1
+		gAudioUnlocked = 1
 	}
 }
 
@@ -391,9 +406,9 @@ var gGameDraw = () => {
 	if(gState == 'leaderboard') {
 		gl1.drawRect(0,0,gSizeX,gSizeY,0xcfe7f77f)
 		var y = 10
-		glText.draw("Scores", gSizeX/2,y,2,1)
-		y+=32
-		glText.draw("Level 1", gSizeX/2,y,1,1)
+		glText.draw("Level 1", gSizeX/2,y,2,1)
+		y+=35
+		glText.draw(gLevel.name+" slope", gSizeX/2,y,1,1)
 		y+=30
 		gLevel.scores = [
 			{name: "Curtastic", score:2500},{name: "SHAUN", score:2000},
@@ -411,7 +426,7 @@ var gGameDraw = () => {
 		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
 		gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize,1)
 		if(gMouseClicked && onBox) {
-			gStateSet('playing')
+			gStateSet('title')
 		}
 		
 		var x = gSizeX/2-gSize*1.5
@@ -419,6 +434,7 @@ var gGameDraw = () => {
 		gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
 		if(gMouseClicked && onBox) {
 			gReset()
+			gStateSet('levelstart')
 		}
 		
 		var x = gSizeX/2+gSize*2
@@ -426,6 +442,7 @@ var gGameDraw = () => {
 		gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
 		if(gMouseClicked && onBox) {
 			gReset()
+			gStateSet('levelstart')
 		}
 	} else {
 		
@@ -483,7 +500,7 @@ var gGameDraw = () => {
 					y+=50
 					var x = gSizeX/2-gSize
 					
-					glText.draw("Tap to continue", gSizeX/2,y,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
+					glText.draw((gMobile?"Tap":"Click")+" to continue", gSizeX/2,y,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
 					if(gMouseClicked) {
 						gStateSet('leaderboard')
 					}
@@ -491,24 +508,31 @@ var gGameDraw = () => {
 			}
 		}
 		if(gState == 'title') {
-			gl1.drawRect(0,0,gSizeX,gSizeY,0xFFFFFF7F)
+			gl1.drawRect(0,0,gSizeX,gSizeY,0xb7d2eb7f)
 			var text = "BORN TO SKI!"
 			var scale = 1.4
 			var x = gSizeX/2-glText.sizeXGet(text)/2*scale
 			for (let i = 0; i < text.length; i++) {
-				var y = 99
+				var y = 25
 				var addy = Math.sin(gloop.updates/5+i/2)
 				y += addy*4
 				glText.draw(text[i], x,y,scale,1)
 				x += glText.sizeXGet(text[i])*scale
 			}
-			if(gMouseDown||location.host=='localhost0') {
-				gStateSet('playing')
+			if(gMouseClicked||location.host=='localhost0') {
+				gReset()
+				gStateSet('leaderboard')
+				return
+			}
+			var y = 99
+			for(var level of gLevels) {
+				glText.draw(level.name+" Slope",gSizeX/2, y,1,1)
+				y += 66
 			}
 		}
 		if(gState == 'levelstart') {
 			gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
-			var text = "BORN TO SKI!"
+			var text = gLevel.name+" Slope"
 			var scale = 1.4
 			var x = gSizeX/2-glText.sizeXGet(text)/2*scale
 			for (let i = 0; i < text.length; i++) {
@@ -518,7 +542,7 @@ var gGameDraw = () => {
 				glText.draw(text[i], x,y,scale,1)
 				x += glText.sizeXGet(text[i])*scale
 			}
-			glText.draw(gLevel.name+" Slope", gSizeX/2,145,1,1)
+			//glText.draw(gLevel.name+" Slope", gSizeX/2,100,1,1)
 			glText.draw((gMobile?"Press":"Click")+" and hold!", gSizeX/2,145,1,1)
 			glText.draw("Let go to jump!", gSizeX/2,165,1,1)
 			glText.draw("Get ready!", gSizeX/2,222,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
@@ -537,6 +561,7 @@ var gGameDraw = () => {
 			gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
 			if(gMouseClicked && onBox) {
 				gReset()
+				gStateSet('levelstart')
 			}
 			var x = gSizeX/2+gSize
 			var y = gSizeY*.5
@@ -547,7 +572,7 @@ var gGameDraw = () => {
 			}
 		}
 	
-		if(gState != 'done') {
+		if(gState != 'done' && gState != 'title') {
 			var size=32
 			var onBox = gMouseOnBox(4,4,size,size) && !gMouseDragged
 			gl1.imageDraw(gMouseDown && onBox?gPauseButtonDown:gPauseButton,4,4,size,size)
@@ -560,28 +585,29 @@ var gGameDraw = () => {
 			}
 		}
 	
-		var time = gloop.time - gStartTime - gPauseTimeTotal
-		if(gState == 'title') {
-			time = 0
-		} else if(gState == 'paused') {
-			time -= gloop.time - gPauseTime
-		} else if(gState == 'done') {
-			time = gPlayTime
-		} else if(gState == 'playing') {
-			gPlayTime = time
-		}
-		var sec = time/1000 | 0
-		var min = sec/60 | 0
-		sec = sec % 60 + ''
-		if(sec.length<2)sec='0'+sec
-		glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
-	
-		//gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
-		glText.draw("[gate]"+gYou.gateGoods, gSizeX-6, 3, 1, 3)
-	
-		//gl1.imageDraw(gTileKindsById.c.image,gSizeX-19,19)
-		glText.draw("[coin]"+gYou.coins, gSizeX-6, 18, 1,3)
+		if(gState != 'title') {
+			var time = gloop.time - gStartTime - gPauseTimeTotal
+			if(gState == 'levelstart') {
+				time = 0
+			} else if(gState == 'paused') {
+				time -= gloop.time - gPauseTime
+			} else if(gState == 'done') {
+				time = gPlayTime
+			} else if(gState == 'playing') {
+				gPlayTime = time
+			}
+			var sec = time/1000 | 0
+			var min = sec/60 | 0
+			sec = sec % 60 + ''
+			if(sec.length<2)sec='0'+sec
+			glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
 		
+			//gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
+			glText.draw("[gate]"+gYou.gateGoods, gSizeX-6, 3, 1, 3)
+		
+			//gl1.imageDraw(gTileKindsById.c.image,gSizeX-19,19)
+			glText.draw("[coin]"+gYou.coins, gSizeX-6, 18, 1,3)
+		}
 	}
 	
 	var x = gState=='playing'||gState=='title'||gState=='paused'?0: -gloop.updates%gCloudImage.sizeX
@@ -713,7 +739,7 @@ w.onload = () => {
 		gMouseY = e.pageY
 		gMouseDownX = gMouseX
 		gMouseDownY = gMouseY
-		gMusicPlayTry()
+		gMusicPlayTry(1)
 	})
 	
 	addEventListener("mousemove", e => {
@@ -733,7 +759,7 @@ w.onload = () => {
 		gMouseDownX = gMouseX
 		gMouseDownY = gMouseY
 		
-		gMusicPlayTry()
+		gMusicPlayTry(1)
 		
 		e.preventDefault()
 		return false
@@ -1021,8 +1047,8 @@ TTTTTTrr rrrTTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTT > <  TTTTTT
-TTTTTT      TTTTTT
+TTTTTT   <  TTTTTT
+TTTTTT >    TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -1034,7 +1060,7 @@ TTTTTT      TTrTTT
 TTTTTT      TTTrTT
 TTTTTT       TTTTT
 TTTTTTrrrrrrrTrTTT
-TTTrrTr r r TTTrTT
+TTTrrT......TTTrTT
 TTTTTT    c TTTTTT
 TTTTTT    c TTTTTT
 TTTTTT      TTTTTT
@@ -1265,7 +1291,6 @@ var gReset = () => {
 	gYou.coins = 0
 	gJumped = 0
 	gPauseTime = gPauseTimeTotal = 0
-	gMusicPlayed = 0
 	
 	var grid = gLevel.grid.split('\n')
 	grid.pop()
@@ -1281,9 +1306,6 @@ var gReset = () => {
 		}
 	}
 
-	if(gState != 'loading') {
-		gStateSet('title')
-	}
 	
 }
 
