@@ -53,6 +53,7 @@ var w = window,
 	gScore = 0,
 	gLevels = [],
 	gLevel,
+	gLevelPlayed,
 	gMenuMusic,
 	gMusic,
 	gAudioUnlocked,
@@ -406,7 +407,8 @@ var gGameDraw = () => {
 	if(gState == 'leaderboard') {
 		gl1.drawRect(0,0,gSizeX,gSizeY,0xcfe7f77f)
 		var y = 10
-		glText.draw("Level 1", gSizeX/2,y,2,1)
+		var levelIndex = gLevels.indexOf(gLevel)
+		glText.draw("Level "+(levelIndex+1), gSizeX/2,y,2,1)
 		y+=35
 		glText.draw(gLevel.name+" slope", gSizeX/2,y,1,1)
 		y+=30
@@ -424,25 +426,32 @@ var gGameDraw = () => {
 		
 		var x = gSizeX/2-gSize*5
 		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-		gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize,1)
+		gl1.imageDraw(gMouseDown && onBox?gBackButtonDown:gBackButton,x,y,gButtonSize,gButtonSize)
 		if(gMouseClicked && onBox) {
 			gStateSet('title')
 		}
-		
-		var x = gSizeX/2-gSize*1.5
-		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-		gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
-		if(gMouseClicked && onBox) {
-			gReset()
-			gStateSet('levelstart')
+
+		if(gLevelPlayed == gLevel) {
+			var x = gSizeX/2-gSize*1.5
+			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+			gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
+			if(gMouseClicked && onBox) {
+				gReset()
+				gStateSet('levelstart')
+			}
 		}
-		
-		var x = gSizeX/2+gSize*2
-		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-		gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
-		if(gMouseClicked && onBox) {
-			gReset()
-			gStateSet('levelstart')
+
+		if(levelIndex < gLevels.length-1 || !gLevelPlayed) {
+			var x = gSizeX/2+gSize*2
+			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+			gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
+			if(gMouseClicked && onBox) {
+				if(gLevelPlayed)levelIndex++
+				gLevelPlayed = gLevel = gLevels[levelIndex]
+				gTrails = []
+				gReset()
+				gStateSet('levelstart')
+			}
 		}
 	} else {
 		
@@ -473,7 +482,7 @@ var gGameDraw = () => {
 		if(gState == 'done') {
 			if(gStateLoops > 50) {
 				var loops = gStateLoops-50
-				var timeBest = (gGrid[0].length-12)/gYou.speedMax/60*1000
+				var timeBest = (gGrid[0].length-8)/gYou.speedMax/60*1000
 				var scoreTime = 1000000 / (1000 + Math.max(timeBest, gPlayTime) - timeBest) |0
 				var scoreGates = 1000 * gYou.gateGoods/(gYou.gateGoods+gYou.gateBads) |0
 				var scoreCoins = 100 * gYou.coins |0
@@ -511,22 +520,30 @@ var gGameDraw = () => {
 			gl1.drawRect(0,0,gSizeX,gSizeY,0xb7d2eb7f)
 			var text = "BORN TO SKI!"
 			var scale = 1.4
-			var x = gSizeX/2-glText.sizeXGet(text)/2*scale
+			var x = gSizeX/2-glText.sizeXGet(text,scale)/2
 			for (let i = 0; i < text.length; i++) {
 				var y = 25
 				var addy = Math.sin(gloop.updates/5+i/2)
 				y += addy*4
-				glText.draw(text[i], x,y,scale,1)
-				x += glText.sizeXGet(text[i])*scale
-			}
-			if(gMouseClicked||location.host=='localhost0') {
-				gReset()
-				gStateSet('leaderboard')
-				return
+				glText.draw(text[i], x,y,scale)
+				x += glText.sizeXGet(text[i],scale)
 			}
 			var y = 99
+			var sizeX = 66*2,sizeY=38
 			for(var level of gLevels) {
-				glText.draw(level.name+" Slope",gSizeX/2, y,1,1)
+				var x = gSizeX/2-sizeX/2
+				gl1.drawRect(x,y,sizeX,sizeY)
+				glText.draw(level.name+" Slope",gSizeX/2, y+11,1,1)
+				
+				var onBox = gMouseOnBox(x,y,sizeX,sizeY) && !gMouseDragged
+				if(gMouseClicked && onBox) {
+					gLevel = level
+					gTrails = []
+					gReset()
+					gStateSet('leaderboard')
+					return
+				}
+				
 				y += 66
 			}
 		}
@@ -534,13 +551,13 @@ var gGameDraw = () => {
 			gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
 			var text = gLevel.name+" Slope"
 			var scale = 1.4
-			var x = gSizeX/2-glText.sizeXGet(text)/2*scale
+			var x = gSizeX/2-glText.sizeXGet(text, scale)/2
 			for (let i = 0; i < text.length; i++) {
 				var y = 55
 				var addy = Math.sin(gloop.updates/5+i/2)
 				y += addy*4
-				glText.draw(text[i], x,y,scale,1)
-				x += glText.sizeXGet(text[i])*scale
+				glText.draw(text[i], x,y,scale)
+				x += glText.sizeXGet(text[i], scale)
 			}
 			//glText.draw(gLevel.name+" Slope", gSizeX/2,100,1,1)
 			glText.draw((gMobile?"Press":"Click")+" and hold!", gSizeX/2,145,1,1)
@@ -672,6 +689,8 @@ w.onload = () => {
 	w.gPlayButtonDown = gl1.imageMake16(13, 1)
 	w.gResetButton = gl1.imageMake16(12, 2)
 	w.gResetButtonDown = gl1.imageMake16(13, 2)
+	w.gBackButton = gl1.imageMake16(12, 3)
+	w.gBackButtonDown = gl1.imageMake16(13, 3)
 
 	var kind = {id:' ', name:'path',texX:2.5,texY:2.5}
 	gTileKinds.push(kind)
@@ -875,6 +894,8 @@ TTTtTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TtTTTT      TTTTTT
+TTTTTT      TTTTTT
+TtTTTT      TTTTTT
 TTTTTT  <TTTTTttTT
 TTTTTT    TTTTTTTT
 TTTTTT      TtTTTT
@@ -882,6 +903,10 @@ TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTTTTTT> TTTTTT
 TTTTTTTTTTt TTTTTT
+TTTTTTTTTTt TTTTTT
+TTTTTTTTTTt TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -943,6 +968,8 @@ TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
 TTTTT  <  TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
@@ -950,9 +977,10 @@ TTTTT      TTTTTTT
 TTTTT   >  TTTTTTT
 TTTTT      TTTTTTT
 TTTTT      TTTTTTT
+TTTTT      TTTTTTT
+TTTTT      TTTTTTT
 TTTTT   <  TTTTTTT
 TTTTT      TTTTTTT
-TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT <    TTTTTTT
@@ -985,6 +1013,18 @@ TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 `
 	
@@ -1199,6 +1239,9 @@ T.....           T
 T       .........T
 T    ............T
 T   .<......T...TT
+T  .............tT
+T  .............tT
+T   ............tT
 T    ...........tT
 T     ...........T
 T      ..........T
@@ -1227,13 +1270,13 @@ T...TTTTT..      T
 T...TTttTT.      T
 T.......        .T
 T...            .T
-T...    .........T
-T..   ...........T
+T..T    ....   ..T
+T .   ...........T
+T     ...........T
+T.    ...........T
 T..  c...........T
-T..  c...........T
-T..   ...........T
-T..     .........T
-T..      ........T
+T..   c..........T
+T..    c.........T
 T..      ........T
 T..      ........T
 T..        ....TTT
@@ -1261,13 +1304,18 @@ T...........     T
 T...........     T
 T...........     T
 TT..........     T
-TTT.........     T
-TTTT.         TTTT
+TTT.........    TT
+TTTT.          TTT
 TTTTT=====TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 `
 
@@ -1306,6 +1354,9 @@ var gReset = () => {
 		}
 	}
 
+	if(gTrails.length > 999) {
+		gTrails = []
+	}
 	
 }
 

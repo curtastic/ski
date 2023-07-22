@@ -40,22 +40,22 @@ var glText = {
 		if(icon) {
 			return icon.sizeX
 		}
-		return 11+(letter=='U'||letter=='M'||letter=='%')-(letter==' '||letter=='I'||letter=='!'||letter==':')*2
+		return 11+(letter=='U'||letter=='M'||letter=='W'||letter=='%')*2-(letter==' '||letter=='I'||letter=='!'||letter==':')*2
 	},
 	sizeXGet: function(text, scale, convertedAlready) {
 		if(!convertedAlready) text = this.iconsConvert(text)
 		text += ''
 		scale = scale || 1
-		var spacing = -1*(Math.floor(scale))
+		var spacing = -scale
 		var x = 0
 		for(var i=0; i<text.length; i++)
 		{
 			var letter = text.charAt(i)
 			var size = this.letterSizeXget(letter, scale)
-			x += size+spacing
+			x += size+spacing|0
 		}
 		
-		return x-spacing
+		return x|0
 	},
 	iconsConvert: function(text) {
 		for(var name in this.iconsByName) {
@@ -84,7 +84,7 @@ var glText = {
 			var iconyadd = scale*3-5 | 0
 			
 			if(center) {
-				this.drawSizeX = this.sizeXGet(text,scale,1)
+				this.drawSizeX = this.sizeXGet(text,scale,1)+scale*4
 				x -= this.drawSizeX/(center==3 ? 1: 2) | 0
 			}
 			
@@ -107,7 +107,7 @@ var glText = {
 						gl1.imageDraw(icon.image, x, (y+icon.offsetY)*scale, icon.sizeX*scale, icon.sizeY*scale)
 					}
 				}
-				x += (this.sizeXGet(letter,scale)-scale) | 0
+				x += (this.sizeXGet(letter,scale)) | 0
 			}
 			this.drawX = x
 			y += 16*scale | 0
