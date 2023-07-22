@@ -48,6 +48,8 @@ var w = window,
 	gStartTime = 0,
 	gPauseTime = 0,
 	gPauseTimeTotal = 0,
+	gPlayTime = 0,
+	gScore = 0,
 	gLevels = [],
 	gLevel,
 	u
@@ -86,7 +88,7 @@ var gGameUpdate = () => {
 			}
 
 			if(guy.z) {
-				guy.z -= .005
+				guy.z -= .005 * (1+(gState=='done')*4) * (4-Math.sin(guy.angle)*guy.speed/guy.speedMax*2)
 				if(guy.z < 0) {
 					guy.z = 0
 				}
@@ -152,12 +154,13 @@ var gGuyGoDown = (guy) => {
 	guy.y += Math.sin(guy.angle) * guy.speed
 	var thrust = gState == 'done'?0:.001
 
-	var kind = gTileGet(guy.x+.5, guy.y+.5)
-	if(kind && kind.id=='.') {
-		thrust *= .5
-		if(guy.speed > guy.speedMax/2)
-			guy.speed = guy.speed*.5 + guy.speedMax/2*.5
-		
+	if(!guy.z) {
+		var kind = gTileGet(guy.x+.5, guy.y+.5)
+		if(kind && kind.id=='.') {
+			thrust *= .3
+			if(guy.speed > guy.speedMax/2)
+				guy.speed = guy.speed*.3 + guy.speedMax/2*.3
+		}
 	}
 
 	if(!guy.z)
@@ -176,7 +179,7 @@ var gGuyGoDown = (guy) => {
 	} else {
 		guy.moved = 1
 		if(!guy.z && guy.y >= guy.trailY+2/gSize) {
-			gTrails.push({x:~~(guy.x*gSize)/gSize, y:~~(guy.y*gSize)/gSize, loop:gloop.updates, first:guy.y >= guy.trailY+4/gSize})
+			gTrails.push({x:~~(guy.x*gSize)/gSize, y:~~(guy.y*gSize)/gSize+.5, loop:gloop.updates, first:guy.y >= guy.trailY+4/gSize})
 			guy.trailY = guy.y
 		}
 		if(guy == gYou && ~~guy.y != ~~oldY) {
@@ -261,6 +264,11 @@ var gHitGrid = (x,y,z,onlyHere) => {
 	}
 }
 
+var gTileIsSnow = (x,y) => {
+	var kind = gTileGet(x,y)
+	return !kind || (kind.id!=' ' && kind.id!='c')
+}
+
 var gTileGet = (x,y) => {
 	var gridX = x|0
 	var gridY = y|0
@@ -276,8 +284,6 @@ var gGridIn = (x,y) => x>=0 && y>=0 && x<gGrid.length && y<gGrid[0].length
 
 var gGridDraw = (layer) => {
 	var tilesX = gTilesX + 1, tilesY = gTilesY+2
-	gCamX = gYou.x - gSizeX/2/gSize
-	gCamY = gYou.y - gSizeY/2/gSize
 	var addX = -(gCamX % 1) * gSize
 	var addY = -(gCamY % 1) * gSize
 	if(gCamX<0)addX-=gSize
@@ -290,6 +296,7 @@ var gGridDraw = (layer) => {
 			gridY = Math.floor(gridY)
 			if(gGridIn(gridX, gridY)) {
 				var kind =  gGrid[gridX][gridY]
+				//if(kind.id == '.')continue
 			} else {
 				var kind =  gTileKindsById.T
 			}
@@ -317,7 +324,20 @@ var gGridDraw = (layer) => {
 						gl1.imageDraw(gTileKindsById[' '].image, drawX, drawY)
 						gl1.imageDraw(gPlayerShadowImage, drawX, drawY+5)
 					} else {
+						if(gTileIsSnow(gridX, gridY)) {
+							if(!gTileIsSnow(gridX+1, gridY))gl1.imageDraw(gSnowRImage, drawX+8, drawY)
+							if(!gTileIsSnow(gridX-1, gridY))gl1.imageDraw(gSnowRImage, drawX, drawY,u,u,1)
+							if(!gTileIsSnow(gridX, gridY+1))gl1.imageDraw(gSnowRImage, drawX+4, drawY+4, u,u,u,u,gPi/2)
+							if(!gTileIsSnow(gridX, gridY-1))gl1.imageDraw(gSnowRImage, drawX+4, drawY-4, u,u,u,u,-gPi/2)
+						}
+						if(kind.id == '.')continue
 						gl1.imageDraw(kind.id=='c' && gloop.updates%12<6 ?kind.image2: kind.image, drawX, drawY+kind.offsetY, u, u, kind.flipX)
+						if(!gTileIsSnow(gridX, gridY)) {
+							if(gTileIsSnow(gridX-1, gridY))gl1.imageDraw(gPathLImage, drawX, drawY)
+							if(gTileIsSnow(gridX+1, gridY))gl1.imageDraw(gPathLImage, drawX+8, drawY,u,u,1)
+							if(gTileIsSnow(gridX, gridY+1))gl1.imageDraw(gPathLImage, drawX+4, drawY+4, u,u,u,u,-gPi/2)
+							if(gTileIsSnow(gridX, gridY-1))gl1.imageDraw(gPathLImage, drawX+4, drawY-4, u,u,u,u,gPi/2)
+						}
 					}
 				}
 			}
@@ -334,98 +354,191 @@ var gGameDraw = () => {
 		gStateSet('title')
 	}
 	
-	gGridDraw(0)
-	
-	for(var i=-1,trail; trail=gTrails[++i];) {
-		var life = gloop.updates - trail.loop
-		gl1.imageDraw(!trail.first ? gPlayerTrailImage:gPlayerTrailImage2, (trail.x-gCamX)*gSize, (trail.y-gCamY)*gSize)
-		if(gCamY > trail.y) {
-			gTrails.splice(i,1)
-			i--
+	if(gState == 'leaderboard') {
+		gl1.drawRect(0,0,gSizeX,gSizeY,0xcfe7f77f)
+		var y = 10
+		glText.draw("Scores", gSizeX/2,y,2,1)
+		y+=32
+		glText.draw("Level 1", gSizeX/2,y,1,1)
+		y+=30
+		gLevel.scores = [
+			{name: "Curtastic", score:2500},{name: "SHAUN", score:2000},
+			{name: "Tarbosh", score:1000},
+			{name: "LUIGI", score:500},
+		]
+		for(var i=-1,score; score=gLevel.scores[++i];) {
+			glText.draw((i+1)+"."+score.name, gSizeX/2-83,y)
+			glText.draw(score.score, gSizeX/2+38,y)
+			y+=20
 		}
-	}
-
-	for(var guy of gGuys) {
-		if(!guy.z)gGuyDraw(guy)
-	}
-	
-	gGridDraw(1)
-	
-	for(var guy of gGuys) {
-		if(guy.z)gGuyDraw(guy)
-	}
-	
-	if(gState == 'title') {
-		gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
-		var text = "BORN TO SKI!"
-		var scale = 1.4
-		var x = gSizeX/2-glText.sizeXGet(text)/2*scale
-		for (let i = 0; i < text.length; i++) {
-			var y = 55
-			var addy = Math.sin(gloop.updates/5+i/2)
-			y += addy*4
-			glText.draw(text[i], x,y,scale,1)
-			x += glText.sizeXGet(text[i])*scale
-		}
-		glText.draw((gMobile?"Press":"Click")+" and hold!", gSizeX/2,145,1,1)
-		glText.draw("Let go to jump!", gSizeX/2,165,1,1)
-		glText.draw("Get ready!", gSizeX/2,222,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
-		if(gMouseDown||location.host=='localhost0') {
+		y=gSizeY-66
+		
+		var x = gSizeX/2-gSize*5
+		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+		gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize,1)
+		if(gMouseClicked && onBox) {
 			gStateSet('playing')
 		}
-	}
-
-	if(gState == 'paused') {
-		gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
-		glText.draw("PAUSED", gSizeX/2, gSizeY*.3, 2, 1)
-
-		var x = gSizeX/2-gSize*3
-		var y = gSizeY*.5
+		
+		var x = gSizeX/2-gSize*1.5
 		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
 		gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
 		if(gMouseClicked && onBox) {
 			gReset()
 		}
-		var x = gSizeX/2+gSize
-		var y = gSizeY*.5
+		
+		var x = gSizeX/2+gSize*2
 		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
 		gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
 		if(gMouseClicked && onBox) {
-			gStateSet('playing')
+			gReset()
 		}
-	}
-
-	var size=32
-	var onBox = gMouseOnBox(4,4,size,size) && !gMouseDragged
-	gl1.imageDraw(gMouseDown && onBox?gPauseButtonDown:gPauseButton,4,4,size,size)
-	if(gMouseClicked && onBox) {
-		gStateSet(gState == 'paused' ? 'playing':'paused')
-	}
-
-	var time = gloop.time - gStartTime - gPauseTimeTotal
-	if(gState == 'title') {
-		time = 0
-	} else if(gState == 'paused') {
-		time -= gloop.time - gPauseTime
-	}
-	var sec = time/1000 | 0
-	var min = sec/60 | 0
-	sec = sec % 60 + ''
-	if(sec.length<2)sec='0'+sec
-	glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
-
-	//gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
-	glText.draw("[gate]"+gYou.gateGoods, gSizeX-6, 3, 1, 3)
-
-	//gl1.imageDraw(gTileKindsById.c.image,gSizeX-19,19)
-	glText.draw("[coin]"+gYou.coins, gSizeX-6, 18, 1,3)
+	} else {
+		
+		gCamX = gYou.x - gSizeX/2/gSize
+		gCamY = gYou.y - gSizeY/2/gSize
+		
+		gGridDraw(0)
+		
+		for(var i=-1,trail; trail=gTrails[++i];) {
+			var life = gloop.updates - trail.loop
+			gl1.imageDraw(!trail.first ? gPlayerTrailImage:gPlayerTrailImage2, (trail.x-gCamX)*gSize, (trail.y-gCamY)*gSize)
+			if(gCamY > trail.y) {
+				gTrails.splice(i,1)
+				i--
+			}
+		}
 	
-	var x = 0
+		for(var guy of gGuys) {
+			if(!guy.z)gGuyDraw(guy)
+		}
+		
+		gGridDraw(1)
+		
+		for(var guy of gGuys) {
+			if(guy.z)gGuyDraw(guy)
+		}
+	
+		if(gState == 'done') {
+			if(gStateLoops > 50) {
+				var loops = gStateLoops-50
+				var timeBest = (gGrid[0].length-12)/gYou.speedMax/60*1000
+				var scoreTime = 1000000 / (1000 + Math.max(timeBest, gPlayTime) - timeBest) |0
+				var scoreGates = 1000 * gYou.gateGoods/(gYou.gateGoods+gYou.gateBads) |0
+				var scoreCoins = 100 * gYou.coins |0
+				var score = scoreTime+scoreGates+scoreCoins
+				var y = Math.max(0, gSizeY-loops*4)
+				gl1.drawRect(0,y,gSizeX,gSizeY,0xcfe7f77f)
+				gl1.drawRect(0,y-2,gSizeX,2,0xb7d2eb7f)
+				y+=60
+				glText.draw("Time Bonus: "+scoreTime, gSizeX/2,y,1,1)
+				y+=30
+				glText.draw("[gate]Gates", gSizeX/2,y,1,1)
+				y+=20
+				glText.draw((scoreGates/10|0)+'% * 10 = '+scoreGates, gSizeX/2,y,1,1)
+				y+=30
+				glText.draw("[coin]Coins", gSizeX/2,y,1,1)
+				y+=20
+				glText.draw(gYou.coins+' * 100 = '+scoreCoins, gSizeX/2,y,1,1)
+				y+=30
+				glText.draw("Total Score:", gSizeX/2,y,1,1)
+				y+=20
+				glText.draw(score, gSizeX/2,y,2,1)
+	
+				if(loops > 50) {
+					y+=50
+					var x = gSizeX/2-gSize
+					
+					glText.draw("Tap to continue", gSizeX/2,y,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
+					if(gMouseClicked) {
+						gStateSet('leaderboard')
+					}
+				}
+			}
+		}
+		if(gState == 'title') {
+			gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
+			var text = "BORN TO SKI!"
+			var scale = 1.4
+			var x = gSizeX/2-glText.sizeXGet(text)/2*scale
+			for (let i = 0; i < text.length; i++) {
+				var y = 55
+				var addy = Math.sin(gloop.updates/5+i/2)
+				y += addy*4
+				glText.draw(text[i], x,y,scale,1)
+				x += glText.sizeXGet(text[i])*scale
+			}
+			glText.draw((gMobile?"Press":"Click")+" and hold!", gSizeX/2,145,1,1)
+			glText.draw("Let go to jump!", gSizeX/2,165,1,1)
+			glText.draw("Get ready!", gSizeX/2,222,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
+			if(gMouseDown||location.host=='localhost0') {
+				gStateSet('playing')
+			}
+		}
+	
+		if(gState == 'paused') {
+			gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
+			glText.draw("PAUSED", gSizeX/2, gSizeY*.3, 2, 1)
+	
+			var x = gSizeX/2-gSize*3
+			var y = gSizeY*.5
+			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+			gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
+			if(gMouseClicked && onBox) {
+				gReset()
+			}
+			var x = gSizeX/2+gSize
+			var y = gSizeY*.5
+			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+			gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
+			if(gMouseClicked && onBox) {
+				gStateSet('playing')
+			}
+		}
+	
+		if(gState != 'done') {
+			var size=32
+			var onBox = gMouseOnBox(4,4,size,size) && !gMouseDragged
+			gl1.imageDraw(gMouseDown && onBox?gPauseButtonDown:gPauseButton,4,4,size,size)
+			if(gMouseClicked && onBox) {
+				if(gState == 'paused') {
+					gStateSet('playing')
+				} else if(gState == 'playing') {
+					gStateSet('paused')
+				}
+			}
+		}
+	
+		var time = gloop.time - gStartTime - gPauseTimeTotal
+		if(gState == 'title') {
+			time = 0
+		} else if(gState == 'paused') {
+			time -= gloop.time - gPauseTime
+		} else if(gState == 'done') {
+			time = gPlayTime
+		} else if(gState == 'playing') {
+			gPlayTime = time
+		}
+		var sec = time/1000 | 0
+		var min = sec/60 | 0
+		sec = sec % 60 + ''
+		if(sec.length<2)sec='0'+sec
+		glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
+	
+		//gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
+		glText.draw("[gate]"+gYou.gateGoods, gSizeX-6, 3, 1, 3)
+	
+		//gl1.imageDraw(gTileKindsById.c.image,gSizeX-19,19)
+		glText.draw("[coin]"+gYou.coins, gSizeX-6, 18, 1,3)
+		
+	}
+	
+	var x = gState=='playing'||gState=='title'||gState=='paused'?0: -gloop.updates%gCloudImage.sizeX
 	while(x<gSizeX) {
 		gl1.imageDraw(gCloudImage,x,gTilesY*gSize-13)
 		x += gCloudImage.sizeX
 	}
-
+	
 	gl1.render()
 
 	gMouseClicked = gMouseHit = gMouseReleased = 0
@@ -460,6 +573,9 @@ w.onload = () => {
 	gl1.setup(gGameCanvas, "tex.png")
 
 	gCloudImage = gl1.imageMake(0,232,24,24)
+	w.gSnowRImage = gl1.imageMake(16,0,8,16)
+	w.gPathLImage = gl1.imageMake(16+8,0,8,16)
+	
 	
 	w.gPlayerShadowImage = gl1.imageMake16(11, 7)
 	gPlayerShadowImage.rgb = 0x33
@@ -790,12 +906,17 @@ TTrrTT      TTTTTT
 TTTrTT      TTTTTT
 TTTTTT      TrTTTT
 TTTTTT      TrTTrT
-TTTTTT      TTTTrT
+TTTTTT r r rTTTTrT
 TTTTTTcrcrcrTTTTTT
 TTTTrT      TTTTTT
 TTTTrT      TTTTTT
-TTTTTT      TTTTTT
+TTTrrT      TTTTTT
+TTTTrT      TTTTTT
+TTTTTTr r r TTTTTT
 TTTTTTrcrcrcTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -841,7 +962,7 @@ TTTTTT      TTrTTT
 TTTTTT      TTTrTT
 TTTTTT       TTTTT
 TTTTTTrrrrrrrTrTTT
-TTTrrTrrrrrrTTTrTT
+TTTrrTr r r TTTrTT
 TTTTTT    c TTTTTT
 TTTTTT    c TTTTTT
 TTTTTT      TTTTTT
@@ -866,7 +987,7 @@ TTTTTTTTrrTTTTTTTT
 TTTTTrTT  TTTrTTTT
 TTTTTTTTccTTTTTTTT
 TTTTTTTT  TTTTTTTT
-TTrTTTTTrrTTTTTTTT
+TTrTTTTT  TTTTTTTT
 TTTTTTTTrrTTTTTTTT
 TTTTTTTTccTTTTTTTT
 TTTTTTTTccTTTTTTTT
@@ -944,6 +1065,115 @@ TTTTT     TTTTTTTT
 TTTTTTTTTTTTTTTTTT
 `
 
+	
+	var level = {}
+	gLevels.push(level)
+	level.name = "Snowy"
+	level.grid = `
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTT        TTTTT
+TTTT          TTTT
+TTT            TTT
+TT              TT
+T              ..T
+T              ..T
+T              ..T
+T              ..T
+T              ..T
+T             ...T
+T           .....T
+T         ......tT
+T       <.......TT
+T      .......T.TT
+T     ...........T
+T.    .....T.....T
+T..    ..........T
+T...       ......T
+T....         ...T
+T...T...       ..T
+T..........      T
+T.........>      T
+T.......         T
+T.....           T
+T       .........T
+T    ............T
+T   .<......T...TT
+T    ...........tT
+T     ...........T
+T      ..........T
+T         ....T..T
+T...         ....T
+T..........      T
+T........T..     T
+T.........       T
+T.....         ..T
+T....        ....T
+T...       ......T
+T...      .......T
+T...   < ........T
+T...    .........T
+T...    .........T
+T...    .........T
+T...    .........T
+T...    .........T
+T...    .........T
+T...    .........T
+T...    .........T
+T...    .........T
+T...          ...T
+T...            .T
+T...TTTTT..      T
+T...TTttTT.      T
+T.......        .T
+T...            .T
+T...    .........T
+T..   ...........T
+T..  c...........T
+T..  c...........T
+T..   ...........T
+T..     .........T
+T..      ........T
+T..      ........T
+T..      ........T
+T..        ....TTT
+T.......        TT
+T..........     tT
+T............    T
+T.............   T
+T.............   T
+T.............   T
+TT............   T
+T.T...........   T
+T.............   T
+T.............rrrT
+T.............   T
+T.............   T
+TT............   T
+T.............   T
+T.............   T
+T............    T
+T...........     T
+T...........     T
+T...........     T
+T...........     T
+T...........     T
+T...........     T
+T...........     T
+TT..........     T
+TTT.........     T
+TTTT.         TTTT
+TTTTT=====TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTT     TTTTTTTT
+TTTTTTTTTTTTTTTTTT
+`
+
+	
 	gLevel = gLevels[1]
 }
 
@@ -959,8 +1189,10 @@ var gReset = () => {
 	gYou.trailY = 0
 	gYou.gateGoods = 0
 	gYou.gateBads = 0
+	gYou.done = 0
 	gYou.coins = 0
 	gJumped = 0
+	gPauseTime = gPauseTimeTotal = 0
 	
 	var grid = gLevel.grid.split('\n')
 	grid.pop()
