@@ -2,6 +2,7 @@
 
 var w = window,
 	gLog = console.log.bind(console),
+	gStorage = window.localStorage||{},
 	gState = 'loading',
 	gStateOld = '',
 	gStateLoop = 0,
@@ -90,12 +91,12 @@ var gStateSet = (state) => {
 	}
 }
 
-var gMusicGet = () => {
+var gMusicShouldGet = () => {
 	return gState == 'playing' || gState == 'levelstart' ? gMusic : gMenuMusic
 }
 
 var gMusicStop = () => {
-	var music = gMusicGet()
+	var music = gMusicShouldGet()
 	if(gMusicPlaying && music!=gMusicPlaying) {
 		gMusicPlaying.stop()
 		gMusicPlaying = u
@@ -104,10 +105,10 @@ var gMusicStop = () => {
 
 var gMusicPlayTry = (click) => {
 	gMusicStop()
-	if(gState == 'paused') {
+	if(gState == 'paused' || gStorage.musicOff=='1') {
 		return
 	}
-	var music = gMusicGet()
+	var music = gMusicShouldGet()
 	if(!gMusicPlaying && music && music.audioBuffer && (click || gAudioUnlocked)) {
 		music.play()
 		gMusicPlaying = music
@@ -328,6 +329,21 @@ var gTileGet = (x,y) => {
 var gInputUpdate = () => {
 	gMouseTileX = gMouseX/gScale/gSize+gCamX
 	gMouseTileY = gMouseY/gScale/gSize+gCamY
+	
+	if(gMouseClicked && gPauseButtonOn()) {
+		gButtonUpSound.play()
+		gMouseClicked = 0
+		if(gState == 'paused') {
+			gStateSet('playing')
+		} else if(gState == 'playing') {
+			gStateSet('paused')
+		}
+	}
+
+	
+	if(gMouseHit) {
+		gButtonDownSound.play()
+	}
 }
 
 var gGridIn = (x,y) => x>=0 && y>=0 && x<gGrid.length && y<gGrid[0].length
@@ -374,7 +390,7 @@ var gGridDraw = (layer) => {
 						gl1.imageDraw(gTileKindsById[' '].image, drawX, drawY)
 						gl1.imageDraw(gPlayerShadowImage, drawX, drawY+5)
 					} else {
-						if(gTileIsSnow(gridX, gridY)) {
+						if(!layer && gTileIsSnow(gridX, gridY)) {
 							if(!gTileIsSnow(gridX+1, gridY))gl1.imageDraw(gSnowRImage, drawX+8, drawY)
 							if(!gTileIsSnow(gridX-1, gridY))gl1.imageDraw(gSnowRImage, drawX, drawY,u,u,1)
 							if(!gTileIsSnow(gridX, gridY+1))gl1.imageDraw(gSnowRImage, drawX+4, drawY+4, u,u,u,u,gPi/2)
@@ -382,7 +398,7 @@ var gGridDraw = (layer) => {
 						}
 						if(kind.id == '.')continue
 						gl1.imageDraw(kind.id=='c' && gloop.updates%12<6 ?kind.image2: kind.image, drawX, drawY+kind.offsetY, u, u, kind.flipX)
-						if(!gTileIsSnow(gridX, gridY)) {
+						if(!layer && !gTileIsSnow(gridX, gridY)) {
 							if(gTileIsSnow(gridX-1, gridY))gl1.imageDraw(gPathLImage, drawX, drawY)
 							if(gTileIsSnow(gridX+1, gridY))gl1.imageDraw(gPathLImage, drawX+8, drawY,u,u,1)
 							if(gTileIsSnow(gridX, gridY+1))gl1.imageDraw(gPathLImage, drawX+4, drawY+4, u,u,u,u,-gPi/2)
@@ -404,53 +420,153 @@ var gGameDraw = () => {
 		gStateSet('title')
 	}
 	
-	if(gState == 'leaderboard') {
-		gl1.drawRect(0,0,gSizeX,gSizeY,0xcfe7f77f)
-		var y = 10
-		var levelIndex = gLevels.indexOf(gLevel)
-		glText.draw("Level "+(levelIndex+1), gSizeX/2,y,2,1)
-		y+=35
-		glText.draw(gLevel.name+" slope", gSizeX/2,y,1,1)
-		y+=30
-		gLevel.scores = [
-			{name: "Curtastic", score:2500},{name: "SHAUN", score:2000},
-			{name: "Tarbosh", score:1000},
-			{name: "LUIGI", score:500},
-		]
-		for(var i=-1,score; score=gLevel.scores[++i];) {
-			glText.draw((i+1)+"."+score.name, gSizeX/2-83,y)
-			glText.draw(score.score, gSizeX/2+38,y)
-			y+=20
-		}
-		y=gSizeY-66
-		
-		var x = gSizeX/2-gSize*5
-		var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-		gl1.imageDraw(gMouseDown && onBox?gBackButtonDown:gBackButton,x,y,gButtonSize,gButtonSize)
-		if(gMouseClicked && onBox) {
-			gStateSet('title')
-		}
-
-		if(gLevelPlayed == gLevel) {
-			var x = gSizeX/2-gSize*1.5
-			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-			gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
-			if(gMouseClicked && onBox) {
-				gReset()
-				gStateSet('levelstart')
+	if(gState == 'leaderboard' || gState == 'title' || gState == 'credits') {
+		if(gState == 'credits') {
+			gl1.drawRect(0,0,gSizeX,gSizeY,0xb7d2eb7f)
+			var y = 12
+			glText.draw("CREDITS", gSizeX/2, y, 2, 1)
+			y+=44
+			glText.draw("Coding:", gSizeX/2, y, 1, 1)
+			y+=18
+			glText.draw("Curtastic", gSizeX/2, y, 1, 1, 0xEEEEEE7F)
+			y+=30
+			glText.draw("Level design:", gSizeX/2, y, 1, 1)
+			y+=18
+			glText.draw("Curtastic", gSizeX/2, y, 1, 1, 0xEEEEEE7F)
+			y+=30
+			glText.draw("Art:", gSizeX/2, y, 1, 1)
+			y+=18
+			glText.draw("Kenney", gSizeX/2, y, 1, 1, 0xEEEEEE7F)
+			y+=30
+			glText.draw("Menu Music:", gSizeX/2, y, 1, 1)
+			y+=18
+			glText.draw("Joshua McLean", gSizeX/2, y, 1, 1, 0xEEEEEE7F)
+			y+=30
+			glText.draw("Level Music:", gSizeX/2, y, 1, 1)
+			y+=18
+			glText.draw("Benjamin Nielsen", gSizeX/2, y, 1, 1, 0xEEEEEE7F)
+			if(gMouseClicked) {
+				gStateSet('title')
 			}
-		}
+		} else if(gState == 'title') {
+			gl1.drawRect(0,0,gSizeX,gSizeY,0xb7d2eb7f)
+			var text = "BORN TO SKI!"
+			var scale = 1.4
+			var x = gSizeX/2-glText.sizeXGet(text,scale)/2
+			for (let i = 0; i < text.length; i++) {
+				var y = 22
+				var addy = Math.sin(gloop.updates/5+i/2)
+				y += addy*4
+				glText.draw(text[i], x,y,scale)
+				x += glText.sizeXGet(text[i],scale)
+			}
+			var y = 66
+			var sizeX = 67*2,sizeY=48
+			for(var level of gLevels) {
+				var x = gSizeX/2-sizeX/2
+				var onBox = gMouseOnBox(x,y,sizeX,sizeY) && !gMouseDragged
+				var addY = gMouseDown && onBox ? 2:0
+				gl1.drawRect(x,y+addY,sizeX,sizeY-addY,0x7F)
+				var pad = 2
+				gl1.drawRect(x+pad,y+pad+addY,sizeX-pad*2,sizeY-pad*3)
 
-		if(levelIndex < gLevels.length-1 || !gLevelPlayed) {
-			var x = gSizeX/2+gSize*2
+				var grid = level.grid.split('\n')
+				grid.shift()
+				grid.shift()
+				grid.shift()
+				grid.shift()
+				grid.shift()
+				grid.shift()
+				grid.shift()
+				grid.shift()
+				for(var gridY=0; gridY<sizeX/5-1; gridY++) {
+					var row = grid[gridY]
+					for(var gridX=5; gridX<13; gridX++) {
+						var kind = gTileKindsById[row[gridX]]
+						if(kind && kind.image && kind.id!='.') {
+							gl1.imageDraw(kind.image,x+gridY*5-(gridY>0)+pad,y+gridX*5-22+addY-(kind.id=='T'),6,6)
+						}
+					}
+				}
+					
+				!addY && gl1.drawRect(x+pad,y+sizeY-pad*2,sizeX-pad*2,pad,0xAAAAAA7F)
+				glText.draw(level.name+" Slope",gSizeX/2, y+16+addY,1,1)
+				if(gMouseClicked && onBox) {
+					gButtonUpSound.play()
+					gMouseClicked = 0
+					gMouseDown = 0
+					gLevel = level
+					gTrails = []
+					gReset()
+					gStateSet('leaderboard')
+					return
+				}
+				
+				y += 60
+			}
+			
+			var x = gSizeX/2-gSize*5
 			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-			gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
+			gl1.imageDraw(onBox && !gMouseDragged && gMouseDown?gSettingsButtonDown:gSettingsButton,x,y,gButtonSize,gButtonSize)
 			if(gMouseClicked && onBox) {
-				if(gLevelPlayed)levelIndex++
-				gLevelPlayed = gLevel = gLevels[levelIndex]
-				gTrails = []
-				gReset()
-				gStateSet('levelstart')
+				gButtonUpSound.play()
+				gStateSet('credits')
+			}
+
+			gAudioButtonsDraw(gSizeX/2-gSize*1.5, y)
+		} else if(gState == 'leaderboard') {
+			gl1.drawRect(0,0,gSizeX,gSizeY,0xcfe7f77f)
+			var y = 10
+			var levelIndex = gLevels.indexOf(gLevel)
+			glText.draw("Level "+(levelIndex+1), gSizeX/2,y,2,1)
+			y+=35
+			glText.draw(gLevel.name+" slope", gSizeX/2,y,1,1)
+			y+=30
+			gLevel.scores = [
+				{name: "Curtastic", score:2500},{name: "SHAUN", score:2000},
+				{name: "Tarbosh", score:1000},
+				{name: "LUIGI", score:500},
+			]
+			for(var i=-1,score; score=gLevel.scores[++i];) {
+				if(gLevel==gLevels[0])score.score=score.score>>1
+				glText.draw((i+1)+"."+score.name, gSizeX/2-83,y)
+				glText.draw(score.score, gSizeX/2+38,y)
+				y+=20
+			}
+			y=gSizeY-66
+			
+			var x = gSizeX/2-gSize*5
+			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+			gl1.imageDraw(gMouseDown && onBox?gBackButtonDown:gBackButton,x,y,gButtonSize,gButtonSize)
+			if(gMouseClicked && onBox) {
+				gButtonUpSound.play()
+				gLevelPlayed = u
+				gStateSet('title')
+			}
+	
+			if(gLevelPlayed == gLevel) {
+				var x = gSizeX/2-gSize*1.5
+				var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+				gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
+				if(gMouseClicked && onBox) {
+					gButtonUpSound.play()
+					gReset()
+					gStateSet('levelstart')
+				}
+			}
+	
+			if(levelIndex < gLevels.length-1 || !gLevelPlayed) {
+				var x = gSizeX/2+gSize*2
+				var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+				gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
+				if(gMouseClicked && onBox) {
+					gButtonUpSound.play()
+					if(gLevelPlayed)levelIndex++
+					gLevelPlayed = gLevel = gLevels[levelIndex]
+					gTrails = []
+					gReset()
+					gStateSet('levelstart')
+				}
 			}
 		}
 	} else {
@@ -482,10 +598,10 @@ var gGameDraw = () => {
 		if(gState == 'done') {
 			if(gStateLoops > 50) {
 				var loops = gStateLoops-50
-				var timeBest = (gGrid[0].length-8)/gYou.speedMax/60*1000
+				var timeBest = (gGrid[0].length-6)/gYou.speedMax/60*1000
 				var scoreTime = 1000000 / (1000 + Math.max(timeBest, gPlayTime) - timeBest) |0
 				var scoreGates = 1000 * gYou.gateGoods/(gYou.gateGoods+gYou.gateBads) |0
-				var scoreCoins = 100 * gYou.coins |0
+				var scoreCoins = 50 * gYou.coins |0
 				var score = scoreTime+scoreGates+scoreCoins
 				var y = Math.max(0, gSizeY-loops*4)
 				gl1.drawRect(0,y,gSizeX,gSizeY,0xcfe7f77f)
@@ -499,7 +615,7 @@ var gGameDraw = () => {
 				y+=30
 				glText.draw("[coin]Coins", gSizeX/2,y,1,1)
 				y+=20
-				glText.draw(gYou.coins+' * 100 = '+scoreCoins, gSizeX/2,y,1,1)
+				glText.draw(gYou.coins+' * 50 = '+scoreCoins, gSizeX/2,y,1,1)
 				y+=30
 				glText.draw("Total Score:", gSizeX/2,y,1,1)
 				y+=20
@@ -511,40 +627,10 @@ var gGameDraw = () => {
 					
 					glText.draw((gMobile?"Tap":"Click")+" to continue", gSizeX/2,y,1,1,0xFFFFFF00+Math.abs(Math.sin(gloop.updates/11))*128)
 					if(gMouseClicked) {
+						gButtonUpSound.play()
 						gStateSet('leaderboard')
 					}
 				}
-			}
-		}
-		if(gState == 'title') {
-			gl1.drawRect(0,0,gSizeX,gSizeY,0xb7d2eb7f)
-			var text = "BORN TO SKI!"
-			var scale = 1.4
-			var x = gSizeX/2-glText.sizeXGet(text,scale)/2
-			for (let i = 0; i < text.length; i++) {
-				var y = 25
-				var addy = Math.sin(gloop.updates/5+i/2)
-				y += addy*4
-				glText.draw(text[i], x,y,scale)
-				x += glText.sizeXGet(text[i],scale)
-			}
-			var y = 99
-			var sizeX = 66*2,sizeY=38
-			for(var level of gLevels) {
-				var x = gSizeX/2-sizeX/2
-				gl1.drawRect(x,y,sizeX,sizeY)
-				glText.draw(level.name+" Slope",gSizeX/2, y+11,1,1)
-				
-				var onBox = gMouseOnBox(x,y,sizeX,sizeY) && !gMouseDragged
-				if(gMouseClicked && onBox) {
-					gLevel = level
-					gTrails = []
-					gReset()
-					gStateSet('leaderboard')
-					return
-				}
-				
-				y += 66
 			}
 		}
 		if(gState == 'levelstart') {
@@ -570,36 +656,43 @@ var gGameDraw = () => {
 	
 		if(gState == 'paused') {
 			gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
-			glText.draw("PAUSED", gSizeX/2, gSizeY*.3, 2, 1)
-	
-			var x = gSizeX/2-gSize*3
-			var y = gSizeY*.5
+			glText.draw("PAUSED", gSizeX/2, 133, 2, 1)
+
+			gAudioButtonsDraw(gSizeX/2-gSize*3, 44)
+
+			var y = gSizeY-88
+			var x = gSizeX/2-gSize*5
 			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-			gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
+			gl1.imageDraw(gMouseDown && onBox?gBackButtonDown:gBackButton,x,y,gButtonSize,gButtonSize)
 			if(gMouseClicked && onBox) {
-				gReset()
-				gStateSet('levelstart')
+				gButtonUpSound.play()
+				gLevelPlayed = u
+				gStateSet('title')
 			}
-			var x = gSizeX/2+gSize
-			var y = gSizeY*.5
+	
+			if(gLevelPlayed == gLevel) {
+				var x = gSizeX/2-gSize*1.5
+				var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+				gl1.imageDraw(gMouseDown && onBox?gResetButtonDown:gResetButton,x,y,gButtonSize,gButtonSize)
+				if(gMouseClicked && onBox) {
+					gButtonUpSound.play()
+					gReset()
+					gStateSet('levelstart')
+				}
+			}
+
+			var x = gSizeX/2+gSize*2
 			var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
 			gl1.imageDraw(gMouseDown && onBox?gPlayButtonDown:gPlayButton,x,y,gButtonSize,gButtonSize)
 			if(gMouseClicked && onBox) {
+				gButtonUpSound.play()
 				gStateSet('playing')
 			}
 		}
 	
 		if(gState != 'done' && gState != 'title') {
 			var size=32
-			var onBox = gMouseOnBox(4,4,size,size) && !gMouseDragged
-			gl1.imageDraw(gMouseDown && onBox?gPauseButtonDown:gPauseButton,4,4,size,size)
-			if(gMouseClicked && onBox) {
-				if(gState == 'paused') {
-					gStateSet('playing')
-				} else if(gState == 'playing') {
-					gStateSet('paused')
-				}
-			}
+			gl1.imageDraw(gMouseDown && gPauseButtonOn()?gPauseButtonDown:gPauseButton,4,4,size,size)
 		}
 	
 		if(gState != 'title') {
@@ -619,10 +712,8 @@ var gGameDraw = () => {
 			if(sec.length<2)sec='0'+sec
 			glText.draw(min+":"+sec, gSizeX/2, 2, 2, 1)
 		
-			//gl1.imageDraw(gTileKindsById['>good'].image,gSizeX-32,1)
 			glText.draw("[gate]"+gYou.gateGoods, gSizeX-6, 3, 1, 3)
 		
-			//gl1.imageDraw(gTileKindsById.c.image,gSizeX-19,19)
 			glText.draw("[coin]"+gYou.coins, gSizeX-6, 18, 1,3)
 		}
 	}
@@ -638,9 +729,41 @@ var gGameDraw = () => {
 	gMouseClicked = gMouseHit = gMouseReleased = 0
 }
 
+var gAudioButtonsDraw = (x, y) => {
+	var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+	gl1.imageDraw(gStorage.musicOff=='1'?gMusicButton:gMusicButtonDown,x,y,gButtonSize,gButtonSize)
+	if(gMouseClicked && onBox) {
+		gButtonUpSound.play()
+		gStorage.musicOff = gStorage.musicOff=='1'?0:1
+		if(gStorage.musicOff == '1') {
+			if(gMusicPlaying) {
+				gMusicPlaying.stop()
+				gMusicPlaying = u
+			}
+		} else {
+			gMusicPlayTry()
+		}
+	}
+	x += gSize*3.5
+	var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
+	gl1.imageDraw(gStorage.soundOff=='1'?gSoundButton:gSoundButtonDown,x,y,gButtonSize,gButtonSize)
+	if(gMouseClicked && onBox) {
+		gStorage.soundOff = gStorage.soundOff=='1'?0:1
+		if(gStorage.soundOff=='0') {
+			gButtonUpSound.play()
+		}
+	}
+	
+}
+
+var gPauseButtonOn = () => {
+	var size=32
+	return gMouseOnBox(4,4,size,size) && !gMouseDragged
+}
+
 var glLoaded = () => {
-	gMusic = gSoundLoad("rock.mp3")
-	gMenuMusic = gSoundLoad("menu.mp3?2")
+	gMusic = gSoundLoad("rock.mp3?10")
+	gMenuMusic = gSoundLoad("menu.mp3?10")
 }
 
 var gGuyDraw = (guy) => {
@@ -669,7 +792,7 @@ var gMouseMove = () => {
 
 w.onload = () => {
 	gMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-	gl1.setup(gGameCanvas, "tex.png")
+	gl1.setup(gGameCanvas, "tex.png?10")
 
 	gCloudImage = gl1.imageMake(0,232,24,24)
 	w.gSnowRImage = gl1.imageMake(16,0,8,16)
@@ -691,6 +814,12 @@ w.onload = () => {
 	w.gResetButtonDown = gl1.imageMake16(13, 2)
 	w.gBackButton = gl1.imageMake16(12, 3)
 	w.gBackButtonDown = gl1.imageMake16(13, 3)
+	w.gSettingsButton = gl1.imageMake16(12, 7)
+	w.gSettingsButtonDown = gl1.imageMake16(13, 7)
+	w.gMusicButton = gl1.imageMake16(12, 5)
+	w.gMusicButtonDown = gl1.imageMake16(13, 5)
+	w.gSoundButton = gl1.imageMake16(12, 6)
+	w.gSoundButtonDown = gl1.imageMake16(13, 6)
 
 	var kind = {id:' ', name:'path',texX:2.5,texY:2.5}
 	gTileKinds.push(kind)
@@ -746,6 +875,16 @@ w.onload = () => {
 		
 		gl1.resize()
 	}
+
+	setTimeout(() => {
+		if(w.gInfoDiv && w.gInfoDiv.style) {
+			w.gInfoDiv.remove()
+		}
+		var div = document.createElement('div')
+		var s = 'tps:/'+'/cu'
+		div.innerHTML = `<div style='width:100%;position:fixed;bottom:0;text-align:center;font-family:courier'>&copy; <a href='ht${s}rtastic`+`.`+`com'>Curtastic Corp</a> `+(new Date().getFullYear())+`</div>`
+		document.body.appendChild(div)
+	}, 100000)
 
 	ondragstart = _ => false 
 	onselectstart = _ => false 
@@ -842,6 +981,9 @@ w.onload = () => {
 	w.gSoundGateGood = gSoundLoad([300, 300, .05, .01, .01,  400, 400, .05, .01, .01,  500, 500, .05, .01, .01,])
 	w.gSoundGateBad = gSoundLoad([202,202,.1,.01,.02, 202,202,.1,.01,.02])
 	w.gSoundWin = gSoundLoad([202,202,.1,.01,.02, 262,262,.1,.01,.02, 402,402,.1,.01,.02, 502,502,.1,.01,.02, 602,602,.2,.01,.02, 552,552,.2,.01,.02, 652,652,.3,.01,.02])
+	w.gButtonDownSound = gSoundLoad([180,160,.05,.04,.04])
+	w.gButtonUpSound = gSoundLoad([242,366,.06,.01,.02])
+
 	onresize()
 
 	gReset()
@@ -854,6 +996,8 @@ var gLevelsSetup = () => {
 	gLevels.push(level)
 	level.name = "Woods"
 	level.grid = `
+TTTTTTTT  TTTTTTTT
+TTTTTTT    TTTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -862,29 +1006,27 @@ TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
+TTTTTTT     TTTTTT
 TTTTTTT>    TTTTTT
-TTTTTT      TTTTTT
+TTTTTTT     TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT    <TTTTTTT
+TTTTTT     TTTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
+TTTTTTT     TTTTTT
 TTTTtTTT>   TTTTTT
-TtTTTT      TTTTTT
+TtTTTTT     TTTTTT
 tTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTtT
-TTTTTT      TTTTTT
+TTTTTT     TTTTTTT
 TTTTTT   <TTTTTTTT
-TTTTTT      TTTTTT
+TTTTTT     TTTTTTT
 TTTTtT      TTtTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -904,21 +1046,27 @@ TTTTTT      TTTTTT
 TTTTTTTTTT> TTTTTT
 TTTTTTTTTTt TTTTTT
 TTTTTTTTTTt TTTTTT
-TTTTTTTTTTt TTTTTT
+TTTTTTTTTTtcTTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
+TTTTTT rrr  TTTTTT
+TTTTTT  r   TTTTTT
+TTTTTTr r   TTTTTT
+TTTTTTrrrc  TTTTTT
 TTTTTT      TTTTTT
+TTTTTTr r   TTTTTT
+TTTTTTr r   TTTTTT
+TTTTTTrrrc  TTTTTT
 TTTTTT      TTTTTT
+TTTTT r r   TTTTTT
+TTTTTr r r  TTTTTT
+TTTTTr r r  TTTTTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
+TTTTTTrrr   TTTTTT
+TTTTTTr r   TTTTTT
+TTTTTTrrrc  TTTTTT
+TTTTTTr     TTTTTT
+TTTTTTr     TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTTrrrrrrTTTTTT
@@ -974,7 +1122,8 @@ TTTTT  <  TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT      TTTTTTT
-TTTTT   >  TTTTTTT
+TTTTT      TTTTTTT
+TTTTTT  >  TTTTTTT
 TTTTT      TTTTTTT
 TTTTT      TTTTTTT
 TTTTT      TTTTTTT
@@ -989,8 +1138,8 @@ TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
+TTTTTt   tTTTTTTTT
+TTTTTt   tTtTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT   c TTTTTTTT
@@ -1032,91 +1181,99 @@ TTTTTTTTTTTTTTTTTT
 	gLevels.push(level)
 	level.name = "Rocky"
 	level.grid = `
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTrrTT      TTTTTT
-TTTrTT      TTTTTT
-TTTTTT      TrTTTT
-TTTTTT      TrTTrT
-TTTTTT r r rTTTTrT
-TTTTTTcrcrcrTTTTTT
-TTTTrT      TTTTTT
-TTTTrT      TTTTTT
+TT  rr      T  TTT
+TrTrrr      rr   T
+TT   T      rrTrTT
+TtTTTT      TrrrTT
+TTrrrT      Tt rrT
+rTrrrT      TrrTrT
+rrrrrT      TTrrTT
+TTrrrT      TT rrT
+rTrrrT      TrrrrT
+rrrrrT      TTTrTT
+TTTrrT      TrrTrT
+TT TrT r r rTr TrT
+TTTrrTcrcrcrTrtttT
+TT TrT r r rTr TrT
+TTrrrT      TrtrrT
+rTrrrT      TrrrrT
+rTrrrT      TrrrrT
+rrrrrT      TTTrtT
+Tt TrT      TrrrTT
+trTTrTr r r TTrrrT
+TrTr TrcrcrcTTTrTT
+trTTrTr r r TTrrrT
+TrTrrT      TrrrrT
+TTrrrT      TTrTrr
+TTTT T      T TTTr
+TTrTTT      TTTTrT
+tTTrtT      TTTrTT
+TTrTTT      T rTTT
+TTrrTT r    TTTrrT
+TrrrTT      TTrTTT
+TTTrrT      TTrTTT
+TrTTtT c r cTtTrrT
+TrTrTT      TT TtT
+TTTTTT      TrrrTT
+TTrrTT     rTTrrrT
 TTTrrT      TTTTTT
-TTTTrT      TTTTTT
-TTTTTTr r r TTTTTT
-TTTTTTrcrcrcTTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT r    TTTrrT
-TTTTTT      TTrTTT
-TTTTTT      TTTTTT
-TTTTTT c r cTTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTrTTT     rTTTTTT
-TTTrrT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT  r   TrTTTT
-TTTTTT      TrTrTT
+TTTTTT      TTTT T
+TTTTTT      TTrrTT
+TTTrrT  r   TrrrTT
+TTT  T      Tr rtT
 TTTrTT      TTTTrT
 TTTTTT      TTTTTT
 TTTTTT    r TTTTTT
 TTTTrT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTTr   r TTTTTT
-TTrTTT  r   TTTTTT
-TTTrTT     rTTTTTT
-TTrTTTr     TTTTTT
+TTTrTTr   r TrrrTT
+TTrtTT  r   TTrrrT
+TTTrTT     rTTrTTT
+TTrTTTr     TTTTTr
 TTTTTT   rr TTTTTT
-TTTTTT      TTTTTT
-TTTrTT rr  rTTTTTT
+TTTTTT      TrTTTT
+TrTrTT rr  rTTTTrT
 TTTTTT  r  rTTTTTT
 TTTTTTr   rrTTTTTT
-TTTTTTrr rrrTTTTTT
+TTTTTTrr rrrTrrrTT
+TTTTTT      TTrrTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT   <  TTTTTT
+TrTTTT      TTTTTT
+TTTTTT   <  TTTrTT
 TTTTTT >    TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
+TTrTTT      TTrTTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTrTTT      TTTTTT
+TTTTTT      TTTrTr
+TTrTTT      TrrrrT
 TTTTTT      TTrTTT
-TTTTTT      TTTrTT
+TTTTrT      TTTrTT
 TTTTTT       TTTTT
-TTTTTTrrrrrrrTrTTT
+TTTTrTrrrrrrrTrTTT
 TTTrrT......TTTrTT
 TTTTTT    c TTTTTT
 TTTTTT    c TTTTTT
+TTTTrT      TrTTTT
+TTTTTT      TrTTTT
+TTTrTT      TrTrTT
+TTTTTT c    TTTTrT
+TTTTrTc     TTTTTT
+TTTrTTr     TrTTTT
+TTTTTT      TTTTrT
 TTTTTT      TTTTTT
-TTTTTT c    TTTTTT
-TTTTTTc     TTTTTT
-TTTTTTrrrrrrTrTTTT
+TTTrTT      TTTrTT
 TTTTrTc     TTrTTT
 TTTTrTrrrrrrTrrTTT
+TTTTrT      TTTTTT
+TTTrTT      TTTTTT
+TTrTTT      TTTrTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
+TTrTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTrTT  TTTTTTTT
-TTTTTTTT  TrTTTTTT
+TTrTTTTT  TrTTTrTT
 TTTTTTTT  TTTTTTTT
 TTTTTTTT  TTTTTTTT
 TTTTTTTT  TTTTTTrT
@@ -1128,26 +1285,33 @@ TTTTTTTT  TTTTTTTT
 TTrTTTTT  TTTTTTTT
 TTTTTTTTrrTTTTTTTT
 TTTTTTTTccTTTTTTTT
-TTTTTTTTccTTTTTTTT
-TTTTTTTTccTTTTTTTT
+TTTTTTrTccTrrTTTTT
+TTTTTTTTccTTrrTTTT
 TTTTrTTTrrTTTTTTTT
+TTTTTTrT  TTTTTTTT
+TTTTTTTT  TTrrTTTT
+TTTTTTrT  TrTTTTTT
+TTTrTTTT  TTTTTTTT
 TTTTTTTT  TTTTTTTT
 TTTTTTTT  TTTTTTTT
+TTTTTTrT  TTrTTTTT
+TTTTTTrTrrTTTTTTTT
+TTTTTTTT..TTrrTTTT
+TTTTTTrT..TrTTTTTT
+TTTrTTTT  TTTTTTTT
+TTTTTTTTrrTTTTTTTT
 TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
-TTTTTTTT  TTTTTTTT
+TTTTTTrT  TTrTTTTT
 TTTTTTTT  TTTTTTTT
 TTTTTTTTccTTTTTTTT
 TTTTTTTTccTTTTTTTT
 TTTTTTTTccTTTTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTT      TrTTTT
+TTrTTT      TrTTTT
 TTTTTT      TrTrTT
 TTTTTT      TTTTTT
-TTTTTT       TTTTT
+rTTTTT       TTTTr
 TTTTTT         TTT
 TTTTTTrrrrrrT  TTT
 TTTTTTrrrrrrTT TTT
@@ -1162,8 +1326,8 @@ TTTTT       TTTTTT
 TTrTT      rTTTTTT
 TrrTT       TTTTTT
 TTTTT       TTTTTT
-TTTTT       TTTTTT
-TTTTT       TTTTTT
+TrTTT       TTTTTT
+rTrTT       TTTTTr
 TTTTTrrrr>  TTTTTT
 TTTTrrr     TTrrTT
 TTTTT       TTTTTT
@@ -1173,12 +1337,12 @@ TTTTT   r   TTTTrT
 TrrTT       TTTTTT
 TTTTT      rTTTTTT
 TTTTT  <rrrrTTTTTT
-TTTTT    rrrTTTTTT
-TTTTT     rrTTTTTT
-TTTTT      rTTTTTT
+TTTTT    rrrTrTTTT
+TTTTT     rrTrTTTT
+TTTrT      rTTTrTT
 TTTTrr     rTTTTTT
 TTTTT       TTTTTT
-TTTTT       TrTTTT
+TrTTT       TrTTTT
 TTTTT r     TTTTTT
 TTTTT       TTTTTT
 TrTTT       TTTTTT
@@ -1187,20 +1351,21 @@ TTTTT       TTTTTT
 TTTTT       TTTTTT
 TTTTT   r   TTTTTT
 TTTrT       TTTTTT
-TTTTT       TTTTTT
-TTTTT    r  TTTTTT
+TTttT       TTrTTT
+TTttT    r  TTTTTT
 TTTrT       TTTTTT
 TTTTT       TTTTTT
 TTTTT     r TTTTTT
-TTTrT       TTrTTT
+TTtrT       TTrTTT
 TTTTT       TrTTTT
 TTTTT      rTrTTTT
-TTTTT=====TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTTTTTTTTTTTTTTT
+TTTrT=====TTTTTTTT
+TTrTT     TTTTTTTT
+TTtTT     TrTTTTTT
+TTTrT     TrTTTTTT
+TTTtr.   .rrTTTTrT
+TTTTr.. ..rrTTTTTT
+TTTTTttrrrrtTTTTTr
 `
 
 	
@@ -1278,9 +1443,9 @@ T..  c...........T
 T..   c..........T
 T..    c.........T
 T..      ........T
-T..      ........T
+T..       .......T
 T..        ....TTT
-T.......        TT
+T........      .TT
 T..........     tT
 T............    T
 T.............   T
@@ -1290,6 +1455,17 @@ TT............   T
 T.T...........   T
 T.............   T
 T.............rrrT
+T.............   T
+T.............   T
+TT............   T
+T.............   T
+T.............   T
+T.............  rT
+T.............rrrT
+T............rrrrT
+T.............rrrT
+T............. rrT
+T.............   T
 T.............   T
 T.............   T
 TT............   T
@@ -1311,6 +1487,17 @@ TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT

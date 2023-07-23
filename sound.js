@@ -27,6 +27,9 @@ var gSoundLoad = function() {
 	gSound.prototype.play = function(loop) {
 		if(!this.audioBuffer)
 			return false
+
+		if(gStorage[this.audioBuffer.length>1000000 ? 'musicOff':'soundOff']=='1')return false
+		
 		var source = gAudioContext.createBufferSource()
 		if(!source)
 			return false
