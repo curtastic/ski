@@ -70,15 +70,23 @@ var gSoundLoad = function() {
 
 		source.start(0)
 
+		this.playing = true
+		this.playTime = Date.now()
+
 		return true
 	}
 	
+	gSound.prototype.isPlaying = function() {
+		return this.playing && Date.now()-this.playTime<this.audioBuffer.duration*1000
+	}
+	
 	gSound.prototype.stop = function() {
+		this.playing = 0
 		if(this.gainNode)
 			this.gainNode.gain.value = 0
 	}
 	
-	// Set volume before or during play. 0=silent, 1=max
+	// Set volume before or during play. 0=silent, 1=max. Doesn't work on mobile iOS.
 	gSound.prototype.setVolume = function(volume) {
 		this.volume = volume
 
@@ -175,6 +183,7 @@ var gSoundLoad = function() {
 							sound.audioBuffer = buffer
 						},
 						function(error) {
+							gLog(filename)
 							debugger
 						}
 					)

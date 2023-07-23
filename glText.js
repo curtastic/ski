@@ -40,7 +40,7 @@ var glText = {
 		if(icon) {
 			return icon.sizeX
 		}
-		return 11+(letter=='U'||letter=='M'||letter=='W'||letter=='%')*2-(letter==' '||letter=='I'||letter=='!'||letter==':')*2
+		return 11+(letter=='M'||letter=='W'||letter=='%')*2-(letter==' '||letter=='I'||letter=='!'||letter==':')*3
 	},
 	sizeXGet: function(text, scale, convertedAlready) {
 		text = text+''

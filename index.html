@@ -12,14 +12,15 @@
 			* {box-sizing:border-box;-ms-interpolation-mode:nearest-neighbor;image-rendering:-webkit-optimize-contrast;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges;image-rendering:pixelated}
 		</style>
 	</head>
-	<body style="margin:0;overflow:hidden;background:#FFF">
+	<body style="margin:0;overflow:hidden;background:#CFE7F7;font-family:courier">
+		<div style='width:100%;text-align:center;margin-top:22vh;position:absolute;z-index:-1'>Loading Game...</div>
 		<script src='gl1.js?10'></script>
 		<script src='glText.js?10'></script>
 		<script src='sound.js?10'></script>
 		<script src='gloop.js?10'></script>
 		<script src='main.js?11'></script>
-		<canvas id=gGameCanvas></canvas>
-		<div id=gInfoDiv style='width:100%;position:fixed;bottom:0;text-align:center;font-family:courier'>
+		<canvas id=gGameCanvas style='display:none'></canvas>
+		<div id=gInfoDiv style='width:100%;position:fixed;bottom:0;text-align:center'>
 			&copy; <a href='https://curtastic.com'>Curtastic Corp</a> 2023
 		</div>
 	</body>
