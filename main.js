@@ -1,8 +1,9 @@
 "use strict"
-
+//server. ski lift. speed boosts. yeti. out of bounds level. mtn high theme.
 var w = window,
 	gLog = console.log.bind(console),
 	gStorage = window.localStorage||{},
+	gFlakes = [],
 	gState = 'loading',
 	gStateOld = '',
 	gStateLoop = 0,
@@ -81,6 +82,19 @@ var gStateSet = (state) => {
 		gMusicPlaying = u
 	}
 
+	if(gState == 'done') {
+		gFlakes = []
+	}
+	if(gState == 'title') {
+		gFlakes = []
+	}
+	if(state == 'title') {
+		gFlakes = []
+		for(var i=0; i<55; i++) {
+			gFlakes.push({x:Math.random()*gSizeX*2-gSizeX,y:-Math.random()*gSizeY,speedX:.5+Math.random()*.1,speedY:1+Math.random()*.5})
+		}
+	}
+	
 	gStateOld = gState
 	gState = state
 	gStateLoop = gloop.updates
@@ -89,6 +103,7 @@ var gStateSet = (state) => {
 	if(gStateOld == 'paused') {
 		gMusicPlayTry()
 	}
+
 }
 
 var gMusicShouldGet = () => {
@@ -135,6 +150,7 @@ var gGameUpdate = () => {
 				guy.z -= .005 * (1+(gState=='done')*4) * (4-Math.sin(guy.angle)*guy.speed/guy.speedMax*2)
 				if(guy.z < 0) {
 					guy.z = 0
+					gGuyPoomp(guy, 9)
 				}
 			}
 	
@@ -142,14 +158,18 @@ var gGameUpdate = () => {
 				if(gMouseDown) {
 					gYou.going = 1
 					if(gYou.z) {
+						gGuyPoomp(guy, gYou.z*9)
 						gYou.z = 0
 						gYou.frame = 0
 					}
-					//gYou.angle += .02*(gYou.x-gMouseTileX)
-					var angle = Math.atan2(Math.max(0,gMouseTileY-gYou.y), gMouseTileX-gYou.x)
-					//gLog(angle, gYou.angle)
+					var angle = Math.atan2(Math.max(0,gMouseTileY-(gYou.y+1)), gMouseTileX-(gYou.x+.5))
 					if(angle < 0)angle = 0
 					if(angle > gPi)angle = gPi
+					var turn = Math.cos(angle)-Math.cos(gYou.angle)
+					if(Math.abs(turn)>.5+Math.random()*.5) {
+						var way = -Math.sign(turn)*(.9+Math.random()*.1)
+						gFlakes.push({x:guy.x+.5+way*.3, y:guy.y+.8, speedX:.02*way, speedY: .02, z:1, speedZ:.14})
+					}
 					gYou.angle += Math.sign(angle-gYou.angle)*.05
 				}
 				if(gYou.angle<gPi*.1)gYou.angle=gPi*.1
@@ -159,7 +179,6 @@ var gGameUpdate = () => {
 				gYou.x += goX
 				if(gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.4, gYou.z) || gHitGrid(gYou.x+.2+(goX>0)*.6, gYou.y+.9, gYou.z)) {
 					gYou.x = oldX
-					//gYou.angle = gPi/2
 					gYou.speed *= .9
 					gYou.z = 0
 				} else {
@@ -170,15 +189,18 @@ var gGameUpdate = () => {
 			if(guy.going)
 				gGuyGoDown(guy)
 			if(guy.moved) {
-				guy.frame+=.1
+				if(guy.speed < guy.speedMax/2 || guy.frame>1)
+					guy.frame+=.1
+				if(gState == 'done')guy.frame+=.12
 				if(~~guy.frame>1)guy.frame-=2
-				if(gState == 'done')guy.frame=0
+				//if(gState == 'done')guy.frame=0
 			}
 			if(gMouseDown)gJumped=0
 			if(!gMouseDown && guy == gYou && !gYou.z && !gYou.fell && !gJumped && gState=='playing') {
 				if(gYou.speed > .015) {
 					gYou.z = 1
 					gJumped = 1
+					gGuyPoomp(guy, 8)
 				}
 			}
 		}
@@ -190,6 +212,13 @@ var gGameUpdate = () => {
 	
 	gKeyHit = []
 	gKeyReleased = []
+}
+
+var gGuyPoomp = (guy, total) => {
+	for(var i=0; i<total; i++) {
+		var way = (Math.random()>.5?1:-1)*Math.random()
+		gFlakes.push({x:guy.x+.5+way*.4, y:guy.y+.8, speedX:.02*way, speedY: Math.random()*.03, z:1, speedZ:.14})
+	}
 }
 
 var gGuyGoDown = (guy) => {
@@ -213,6 +242,9 @@ var gGuyGoDown = (guy) => {
 
 	
 	if(gHitGrid(guy.x+.2, guy.y+.9,guy.z) || gHitGrid(guy.x+.8, guy.y+.9,guy.z)) {
+
+		gGuyPoomp(guy, guy.speed*155)
+		
 		guy.y = oldY
 		guy.z = 0
 		guy.speed = 0
@@ -283,6 +315,15 @@ var gGuyGoDown = (guy) => {
 					guy.coins++
 					gSoundCoin.play()
 				}
+			}
+		}
+	}
+
+	if(!guy.z) {
+		if(gState == 'playing') {
+			if(Math.random()*3<guy.speed/guy.speedMax) {
+				var way = Math.random()>.5?1:-1
+				gFlakes.push({x:guy.x+.5+way*.3, y:guy.y+.8, speedX:.02*way, speedY: .02, z:1, speedZ:.14})
 			}
 		}
 	}
@@ -460,7 +501,9 @@ var gGameDraw = () => {
 				glText.draw(text[i], x,y,scale)
 				x += glText.sizeXGet(text[i],scale)
 			}
-			var y = 66
+
+			
+			var y = 64
 			var sizeX = 67*2,sizeY=48
 			for(var level of gLevels) {
 				var x = gSizeX/2-sizeX/2
@@ -514,6 +557,7 @@ var gGameDraw = () => {
 			}
 
 			gAudioButtonsDraw(gSizeX/2-gSize*1.5, y)
+			gFlakesDraw()
 		} else if(gState == 'leaderboard') {
 			gl1.drawRect(0,0,gSizeX,gSizeY,0xcfe7f77f)
 			var y = 10
@@ -523,12 +567,13 @@ var gGameDraw = () => {
 			glText.draw(gLevel.name+" slope", gSizeX/2,y,1,1)
 			y+=30
 			gLevel.scores = [
-				{name: "Curtastic", score:2500},{name: "SHAUN", score:2000},
+				{name: "Curtastic", score:2600},{name: "SHAUN", score:2000},
 				{name: "Tarbosh", score:1000},
 				{name: "LUIGI", score:500},
 			]
 			for(var i=-1,score; score=gLevel.scores[++i];) {
-				if(gLevel==gLevels[0])score.score=score.score>>1
+				if(gLevel==gLevels[0])score.score=score.score*.8|0
+				if(gLevel==gLevels[2])score.score=score.score*.6|0
 				glText.draw((i+1)+"."+score.name, gSizeX/2-83,y)
 				glText.draw(score.score, gSizeX/2+38,y)
 				y+=20
@@ -585,11 +630,14 @@ var gGameDraw = () => {
 			}
 		}
 	
+		gFlakesDraw()
+		
 		for(var guy of gGuys) {
 			if(!guy.z)gGuyDraw(guy)
 		}
 		
 		gGridDraw(1)
+		
 		
 		for(var guy of gGuys) {
 			if(guy.z)gGuyDraw(guy)
@@ -598,7 +646,7 @@ var gGameDraw = () => {
 		if(gState == 'done') {
 			if(gStateLoops > 50) {
 				var loops = gStateLoops-50
-				var timeBest = (gGrid[0].length-6)/gYou.speedMax/60*1000
+				var timeBest = (gGrid[0].length-4)/gYou.speedMax/60*1000
 				var scoreTime = 1000000 / (1000 + Math.max(timeBest, gPlayTime) - timeBest) |0
 				var scoreGates = 1000 * gYou.gateGoods/(gYou.gateGoods+gYou.gateBads) |0
 				var scoreCoins = 50 * gYou.coins |0
@@ -718,6 +766,7 @@ var gGameDraw = () => {
 		}
 	}
 	
+	
 	var x = gState=='playing'||gState=='title'||gState=='paused'?0: -gloop.updates%gCloudImage.sizeX
 	while(x<gSizeX) {
 		gl1.imageDraw(gCloudImage,x,gTilesY*gSize-13)
@@ -727,6 +776,32 @@ var gGameDraw = () => {
 	gl1.render()
 
 	gMouseClicked = gMouseHit = gMouseReleased = 0
+}
+
+var gFlakesDraw = () => {
+	if(gState == 'title') {
+		for(var flake of gFlakes) {
+			flake.x += flake.speedX
+			flake.y += flake.speedY
+			if(flake.y > gSizeY) {
+				flake.y = -Math.random()*10
+				flake.x = Math.random()*gSizeX*2-gSizeX
+			}
+			gl1.drawRect(flake.x, flake.y, 2,2)
+		}
+	} else {
+		for(var flake,i=-1; flake=gFlakes[++i];) {
+			flake.x += flake.speedX
+			flake.y += flake.speedY
+			flake.z += flake.speedZ
+			flake.speedZ -= .01
+			if(flake.z <= 0) {
+				gFlakes.splice(i--,1)
+			}
+			var size = flake.z|0
+			gl1.drawRect((flake.x-gCamX)*gSize, (flake.y-gCamY)*gSize - (flake.z*7), size,size)
+		}
+	}
 }
 
 var gAudioButtonsDraw = (x, y) => {
@@ -769,9 +844,17 @@ var glLoaded = () => {
 var gGuyDraw = (guy) => {
 	gl1.imageDraw(gPlayerShadowImage, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize+7)
 	var image = guy.z||~~guy.frame==1 ? gPlayerImage2:gPlayerImage
+	var flip = 0
+	if(guy == gYou && gMouseDown) {
+		if(Math.abs(gYou.x+.5-gMouseTileX)>1) {
+			image = ~~guy.frame==1 ? gPlayerImageLeft2:gPlayerImageLeft
+			if(gMouseTileX>gYou.x)
+				flip=1
+		}
+	}
 	var add = guy.fell ? Math.floor(Math.sin(guy.fell/4*gPi)*22) : 0
 	image.rgb = 0xFFFFFF7F+add
-	gl1.imageDraw(image, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7))
+	gl1.imageDraw(image, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7),u,u,flip)
 }
 
 var gMouseDownOnBox = (x,y,sizeX,sizeY) => {
@@ -803,6 +886,9 @@ w.onload = () => {
 	gPlayerShadowImage.rgb = 0x33
 	w.gPlayerImage = gl1.imageMake16(10, 5)
 	w.gPlayerImage2 = gl1.imageMake16(11, 5)
+	w.gPlayerImageLeft = gl1.imageMake16(14, 5)
+	w.gPlayerImageLeft2 = gl1.imageMake16(15, 5)
+	
 	w.gPlayerTrailImage = gl1.imageMake(10*gSize, 4*gSize,gSize,3)
 	w.gPlayerTrailImage2 = gl1.imageMake(11*gSize, 4*gSize,gSize,3)
 	
@@ -1030,16 +1116,28 @@ TTTTTT     TTTTTTT
 TTTTtT      TTtTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
+TTTTTT      TTTTTT
 TTTTTTTTT>  TTTTTT
 TTTTTTT     TTTTTT
 TTTtTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TtTTTT      TTTTTT
 TTTTTT      TTTTTT
 TtTTTT      TTTTTT
 TTTTTT  <TTTTTttTT
 TTTTTT    TTTTTTTT
+TTTTTT      TtTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTTTTT>  TTTTTT
+TTTTTTT     TTTTTT
+TTTtTT      TTTTTT
+TTTTTT      TTTTTT
+TTTTTT  <TTTTTttTT
+TTTTTT    TTTTTTTT
+TTTTTT      TtTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
 TTTTTT      TtTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -1162,6 +1260,8 @@ TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
+TTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
@@ -1314,23 +1414,26 @@ TTTTTT      TTTTTT
 rTTTTT       TTTTr
 TTTTTT         TTT
 TTTTTTrrrrrrT  TTT
+TTTTTTrrrrrrTT TTr
+TTTrrTrrrrrrTT TTT
+TTTrrTrrrrrrTT TTT
 TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrrTT TTT
-TTTTTTrrrrrr   TTT
+TTTTTTrrrrrr   TrT
 TTTTTT         TTT
-TTTTTT       TTTTT
+TTTTTr       TTTTT
+TTTTT       TTrTTT
 TTTTT       TTTTTT
-TTTTT       TTTTTT
-TTrTT      rTTTTTT
-TrrTT       TTTTTT
-TTTTT       TTTTTT
-TrTTT       TTTTTT
-rTrTT       TTTTTr
-TTTTTrrrr>  TTTTTT
-TTTTrrr     TTrrTT
-TTTTT       TTTTTT
+TTTT        TTrTTT
+TTTT        TTTTTT
+TTTT        TTTTTT
+TTrT      TTrTTTTT
+TrT    TTTTrrTTTTT
+TTT        TrrTTTT
+TrTT         TTTTT
+rTrTT         TTTr
+TTTTTrrrr>    TTTT
+TTTTrrr       TrTT
+TTTTT        TTTTT
 TTTTT       TTTrTT
 TTTTT       TTTTTT
 TTTTT   r   TTTTrT
@@ -1340,7 +1443,10 @@ TTTTT  <rrrrTTTTTT
 TTTTT    rrrTrTTTT
 TTTTT     rrTrTTTT
 TTTrT      rTTTrTT
-TTTTrr     rTTTTTT
+TTTTr      rTTTTTT
+TTTTT       TTTTTT
+TTTTT       TTTTTT
+TTTTTr      TTTTTT
 TTTTT       TTTTTT
 TrTTT       TrTTTT
 TTTTT r     TTTTTT
@@ -1373,16 +1479,21 @@ TTTTTttrrrrtTTTTTr
 	gLevels.push(level)
 	level.name = "Snowy"
 	level.grid = `
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTTT      TTTTTT
-TTTTT        TTTTT
-TTTT          TTTT
-TTT            TTT
-TT              TT
-T              ..T
-T              ..T
+TTTTTT......TTTTTT
+TTTTTT......TTTTTT
+TTTTTT......TTTTT
+TTTTTT......TTTTTT
+TTTTTT..  ..TTTTTT
+TTTTTT..  ..TTTTT
+TTTTTT..  ..TTTTTT
+TTTTTT.    .TTTTTT
+TTTTTT.    .TTTTTT
+TTTTT.      .TTTTT
+TTTT.        .TTTT
+TTT.         ..TTT
+TT.           ..TT
+T..           ...T
+T.             ..T
 T              ..T
 T              ..T
 T              ..T
@@ -1401,8 +1512,8 @@ T..........      T
 T.........>      T
 T.......         T
 T.....           T
-T       .........T
-T    ............T
+T        ........T
+T     ...........T
 T   .<......T...TT
 T  .............tT
 T  .............tT
@@ -1414,6 +1525,7 @@ T         ....T..T
 T...         ....T
 T..........      T
 T........T..     T
+T........T...    T
 T.........       T
 T.....         ..T
 T....        ....T
@@ -1444,8 +1556,8 @@ T..   c..........T
 T..    c.........T
 T..      ........T
 T..       .......T
-T..        ....TTT
-T........      .TT
+T..         ...TTT
+T........     ..TT
 T..........     tT
 T............    T
 T.............   T
@@ -1471,6 +1583,58 @@ T.............   T
 TT............   T
 T.............   T
 T.............   T
+T...........     T
+T........       .T
+T.....         ..T
+T....          ..T
+T...     <.......T
+T...           ..T
+T....           .T
+T.....          .T
+T......         .T
+T.......TTTTT>  .T
+T........T.     .T
+T......         .T
+T.....         ..T
+T....          ..T
+T...     <TTTTTT.T
+T...       ......T
+T....       .....T
+T.....      .....T
+T......     .....T
+T.......TTTTT>   T
+T.............   T
+T.............   T
+TT............   T
+T.............   T
+T.............   T
+T............    T
+T...........     T
+T...........    TT
+T...........    TT
+T...........c   TT
+T........... ...TT
+T........... ...TT
+T...........c...TT
+T........... ...TT
+T........... ...TT
+T...........c...TT
+T........... ...TT
+T........... ...TT
+T...............TT
+T...............TT
+T...............TT
+T...........c...TT
+T........... ...TT
+T........... ...TT
+T...........c ..TT
+T...........     T
+T............    T
+T.............   T
+T.............  .T
+TT............  .T
+T.............  .T
+T.............  .T
 T............    T
 T...........     T
 T...........     T
@@ -1479,17 +1643,30 @@ T...........     T
 T...........     T
 T...........     T
 T...........     T
-TT..........     T
-TTT.........    TT
-TTTT.          TTT
+T...........     T
+T...........    .T
+T...........   .TT
+TT..........   .TT
+TTT.........  .TTT
+TTTT.        .TTTT
 TTTTT=====TTTTTTTT
 TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTT     TTTTTTTT
-TTTTTTTTTTTTTTTTTT
-TTTTTTTTTTTTTTTTTT
-TTTTTTTTTTTTTTTTTT
+TTTTT.   .TTTTTTTT
+TTTTT.   .TTTTTTTT
+TTTTT.. ..TTTTTTTT
+TTTT... ...TTTTTTT
+TTT.... ....TTTTTT
+TT..... ........TT
+T...... .........T
+T...... .........T
+T...... .........T
+T...... .........T
+T...... .........T
+T...... .........T
+T...... .........T
+T................T
+T...... .........T
+T................T
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
