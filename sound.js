@@ -23,12 +23,17 @@ var gSoundLoad = function() {
 	var gSound = function() {
 		this.volume = 1
 	}
+
+	var volumeGet = function(sound) {
+		return gStorage[sound.musicIs?'musicVolume':'soundVolume']*1
+	}
 	
 	gSound.prototype.play = function(loop) {
 		if(!this.audioBuffer)
 			return false
 
-		if(gStorage[this.audioBuffer.length>1000000 ? 'musicOff':'soundOff']=='1')return false
+		var volume = volumeGet(this)
+		if(!volume)return false
 		
 		var source = gAudioContext.createBufferSource()
 		if(!source)
@@ -60,16 +65,19 @@ var gSoundLoad = function() {
 			this.gainNode.connect(merger,0,0)
 			this.gainNode2.connect(merger,0,1)
 			merger.connect(gAudioContext.destination)
+
+			this.gainNode.gain.value *= this.volume * volume
+			this.gainNode2.gain.value *= this.volume * volume
 		}
 		else
 		{
-			this.gainNode.gain.value = this.volume
+			this.gainNode.gain.value = this.volume * volume
 			source.connect(this.gainNode)
 			this.gainNode.connect(gAudioContext.destination)
 		}
 
 		source.start(0)
-
+		
 		this.playing = true
 		this.playTime = Date.now()
 
@@ -88,6 +96,7 @@ var gSoundLoad = function() {
 	
 	// Set volume before or during play. 0=silent, 1=max. Doesn't work on mobile iOS.
 	gSound.prototype.setVolume = function(volume) {
+		volume *= volumeGet(this)
 		this.volume = volume
 
 		if(this.gainNode)
@@ -181,6 +190,7 @@ var gSoundLoad = function() {
 						ajax.response,
 						function(buffer) {
 							sound.audioBuffer = buffer
+							sound.musicIs = sound.audioBuffer.length>1000000
 						},
 						function(error) {
 							gLog(filename)
@@ -196,6 +206,7 @@ var gSoundLoad = function() {
 				ajax.send()
 			} else {
 				sound.audioBuffer = make(filename)
+				sound.musicIs = sound.audioBuffer.length>1000000
 			}
 		}
 		return sound

@@ -1,7 +1,7 @@
 "use strict"
 //server. ski lift. speed boosts. yeti. out of bounds level. mtn high theme.
 var w = window,
-	gVersion=10,
+	gVersion = 17,
 	gLog = console.log.bind(console),
 	gStorage = window.localStorage||{},
 	gFlakes = [],
@@ -12,6 +12,9 @@ var w = window,
 	gCamX = 0,
 	gCamY = 0,
 	gYou = {},
+	gGhost = {},
+	gSpots = [],
+	gSpots2 = [],
 	gSize = 16,
 	gButtonSize = 48,
 	gSizeX = 0,
@@ -41,6 +44,9 @@ var w = window,
 	gTileKindsById={},
 	gCloudImage,
 	gTrails=[],
+	gTreeShakeX=0,
+	gTreeShakeY=0,
+	gTreeShakeLoop=0,
 	gGateGoodX=0,
 	gGateGoodY=0,
 	gGateGoodLoop=0,
@@ -49,6 +55,7 @@ var w = window,
 	gGateBadLoop=0,
 	gGuys=[],
 	gPi = Math.PI,
+	gRunLoops = 0,
 	gStartTime = 0,
 	gPauseTime = 0,
 	gPauseTimeTotal = 0,
@@ -89,6 +96,8 @@ var gStateSet = (state) => {
 	}
 	if(gState == 'title') {
 		gFlakes = []
+		gSpots = []
+		gSpots2 = []
 	}
 	if(state == 'title') {
 		gScore = 0
@@ -123,13 +132,12 @@ var gMusicStop = () => {
 
 var gMusicPlayTry = (click) => {
 	gMusicStop()
-	if(gState == 'paused' || gStorage.musicOff=='1') {
+	if(gState == 'paused' || gStorage.musicVolume=='0') {
 		return
 	}
 	var music = gMusicShouldGet()
 	if(!gMusicPlaying && music && music.audioBuffer && (click || gAudioUnlocked)) {
 		music.play()
-		music.setVolume(.5)
 		gMusicPlaying = music
 		gAudioUnlocked = 1
 	}
@@ -215,6 +223,14 @@ var gGameUpdate = () => {
 				}
 			}
 		}
+		
+		if(!(gState == 'done' && gStateLoops > 50)) {
+			if(gSpots2.length < 5555) {
+				var spot = {x:gYou.x, y:gYou.y, z:gYou.z, frame:gYou.frame, image:gYou.image0, flip:gYou.flip0}
+				gSpots2.push(spot)
+				gRunLoops++
+			}
+		}
 	}
 
 	if(gKeyHit[27]) {
@@ -255,6 +271,15 @@ var gGuyGoDown = (guy) => {
 	if(gHitGrid(guy.x+.2, guy.y+.9,guy.z) || gHitGrid(guy.x+.8, guy.y+.9,guy.z)) {
 
 		gGuyPoomp(guy, guy.speed*155)
+		
+		var gridX = guy.x+.5|0
+		var gridY = guy.y+.9|0
+		var kind = gTileGet(gridX, gridY, guy.z)
+		if(kind && kind.id=='T') {
+			gTreeShakeX = gridX
+			gTreeShakeY = gridY
+			gTreeShakeLoop = gloop.updates
+		}
 		
 		guy.y = oldY
 		guy.z = 0
@@ -351,6 +376,7 @@ var gGuyGoDown = (guy) => {
 			if(guy == gYou) {
 				gStateSet('done')
 				gSoundWin.play()
+				gLogDb('levelDone')
 			}
 		}
 	}
@@ -430,6 +456,11 @@ var gGridDraw = (layer) => {
 	var addY = -(gCamY % 1) * gSize
 	if(gCamX<0)addX-=gSize
 	if(gCamY<0)addY-=gSize
+	
+	var treeShakeLoops = gloop.updates - gTreeShakeLoop
+	var gateGoodLoops = gloop.updates - gGateGoodLoop
+	var gateBadLoops = gloop.updates - gGateBadLoop
+	
 	for(var y=0; y<tilesY; y++) {
 		for(var x=0; x<tilesX; x++) {
 			var gridX = x + gCamX
@@ -446,22 +477,26 @@ var gGridDraw = (layer) => {
 				if(kind.image) {
 					var drawX = x*gSize+addX
 					var drawY = y*gSize+addY
-					var gateLoops = gloop.updates - gGateGoodLoop
-					kind.image.rgb = 0xFFFFFF7F
-					if(gateLoops < 8) {
+					if(treeShakeLoops < 11) {
+						if(gTreeShakeX == gridX && gTreeShakeY == gridY) {
+							drawX += Math.sin(treeShakeLoops/4)
+						}
+					}
+					if(kind.id!='=') {
+						kind.image.rgb = 0xFFFFFF7F
+					}
+					if(gateGoodLoops < 8) {
 						if(gGateGoodX == gridX && gGateGoodY == gridY) {
-							drawY -= gateLoops/2
-							kind.image.rgb = 0xFFFFFF7F+Math.floor(Math.sin(gateLoops/8*gPi)*22)
+							drawY -= gateGoodLoops/2
+							kind.image.rgb = 0xFFFFFF7F+Math.floor(Math.sin(gateGoodLoops/8*gPi)*22)
 						}
 					}
-					var gateLoops = gloop.updates - gGateBadLoop
-					if(gateLoops < 8) {
+					if(gateBadLoops < 8) {
 						if(gGateBadX == gridX && gGateBadY == gridY) {
-							drawX += Math.sin(gateLoops/2)*2-1
-							kind.image.rgb = 0xFFFFFF7F+Math.floor(Math.sin(gateLoops/8*gPi)*22)
+							drawX += Math.sin(gateBadLoops/2)*2-1
+							kind.image.rgb = 0xFFFFFF7F+Math.floor(Math.sin(gateBadLoops/8*gPi)*22)
 						}
 					}
-					gTileKindsById['='].image.rgb = 0x0FFF907f
 					if(kind.id=='c' && !layer) {
 						gl1.imageDraw(gTileKindsById[' '].image, drawX, drawY)
 						gl1.imageDraw(gPlayerShadowImage, drawX, drawY+5)
@@ -495,6 +530,9 @@ var gGameDraw = () => {
 		}
 		gStateSet('title')
 	}
+	
+	gCamX = gYou.x - gSizeX/2/gSize+.01
+	gCamY = gYou.y - gSizeY/2/gSize
 	
 	if(gState == 'leaderboard' || gState == 'title' || gState == 'credits') {
 		if(gState == 'credits') {
@@ -574,6 +612,8 @@ var gGameDraw = () => {
 					gMouseClicked = 0
 					gMouseDown = 0
 					gLevel = level
+					gSpots = []
+					gSpots2 = []
 					gTrails = []
 					gReset()
 					gStateSet('leaderboard')
@@ -589,6 +629,7 @@ var gGameDraw = () => {
 			if(gMouseClicked && onBox) {
 				gSoundButtonUpPlay()
 				gStateSet('credits')
+				gLogDb('credits')
 			}
 
 			gAudioButtonsDraw(gSizeX/2-gSize*1.5, y)
@@ -635,7 +676,11 @@ var gGameDraw = () => {
 				if(gMouseClicked && onBox) {
 					gSoundButtonUpPlay()
 					gReset()
+					gTrailsDeleteOld()
+					gSpots = gSpots2
+					gSpots2 = []
 					gStateSet('levelstart')
+					gLogDb('levelStart')
 				}
 			}
 	
@@ -648,28 +693,31 @@ var gGameDraw = () => {
 					if(gLevelPlayed)levelIndex++
 					gLevelPlayed = gLevel = gLevels[levelIndex]
 					gTrails = []
+					gSpots = []
+					gSpots2 = []
 					gReset()
 					gStateSet('levelstart')
+					gLogDb('levelStart')
 				}
 			}
 		}
 	} else {
 		
-		gCamX = gYou.x - gSizeX/2/gSize
-		gCamY = gYou.y - gSizeY/2/gSize
-		
 		gGridDraw(0)
 		
 		for(var i=-1,trail; trail=gTrails[++i];) {
-			var life = gloop.updates - trail.loop
 			gl1.imageDraw(!trail.first ? gPlayerTrailImage:gPlayerTrailImage2, (trail.x-gCamX)*gSize, (trail.y-gCamY)*gSize)
-			if(gCamY > trail.y) {
-				gTrails.splice(i,1)
-				i--
-			}
 		}
 	
 		gFlakesDraw()
+		
+		if(gSpots.length) {
+			var spot = gSpots[Math.min(gSpots.length-1, gRunLoops)]
+			if(spot) {
+				spot.fake = 1
+				gGuyDraw(spot)
+			}
+		}
 		
 		for(var guy of gGuys) {
 			if(!guy.z)gGuyDraw(guy)
@@ -681,7 +729,7 @@ var gGameDraw = () => {
 		for(var guy of gGuys) {
 			if(guy.z)gGuyDraw(guy)
 		}
-	
+		
 		if(gState == 'done') {
 			if(gStateLoops > 50) {
 				var loops = gStateLoops-50
@@ -727,6 +775,7 @@ var gGameDraw = () => {
 						if(scores.length > 8)scores = scores.slice(0,8)
 						gStorage['scoresLevel'+gLevels.indexOf(gLevel)] = JSON.stringify(scores)
 						gSoundButtonUpPlay()
+						gLogDb('saveScore', gScore)
 						gStateSet('leaderboard')
 					}
 				}
@@ -755,9 +804,9 @@ var gGameDraw = () => {
 	
 		if(gState == 'paused') {
 			gl1.drawRect(0,0,gSizeX,gSizeY,0x33)
-			glText.draw("PAUSED", gSizeX/2, 133, 2, 1)
+			glText.draw("PAUSED", gSizeX/2, 144, 2, 1)
 
-			gAudioButtonsDraw(gSizeX/2-gSize*3, 44)
+			gAudioButtonsDraw2(52)
 
 			var y = gSizeY-88
 			var x = gSizeX/2-gSize*5
@@ -767,6 +816,7 @@ var gGameDraw = () => {
 				gSoundButtonUpPlay()
 				gLevelPlayed = u
 				gStateSet('title')
+				gLogDb('pauseQuit')
 			}
 	
 			if(gLevelPlayed == gLevel) {
@@ -776,7 +826,10 @@ var gGameDraw = () => {
 				if(gMouseClicked && onBox) {
 					gSoundButtonUpPlay()
 					gReset()
+					gTrailsDeleteOld()
+					gSpots2 = []
 					gStateSet('levelstart')
+					gLogDb('pauseRetry')
 				}
 			}
 
@@ -855,29 +908,64 @@ var gFlakesDraw = () => {
 	}
 }
 
+var gAudioButtonsDraw2 = (y) => {
+	var x = gSizeX/2-80
+	var sizeX = 86
+	var buttonSize = 32
+	var sizeY = 14
+	gl1.drawRect(x+buttonSize,y+buttonSize/2-sizeY/2-2,sizeX+2,sizeY+4,0x7F)
+	gl1.drawRect(x+buttonSize,y+buttonSize/2-sizeY/2,sizeX,sizeY,0x009adc7F)
+	gl1.drawRect(x+buttonSize+gStorage.soundVolume*(sizeX-4)-2,y+4,10,buttonSize-8,0x7F)
+	gl1.drawRect(x+buttonSize+gStorage.soundVolume*(sizeX-4),y+6,6,buttonSize-12,0x00c6f47F)
+	gl1.imageDraw(gSoundsButtonDown,x,y,buttonSize,buttonSize)
+	if(gMouseDown && gMouseDownOnBox(x+buttonSize,y,sizeX,buttonSize)) {
+		var far = (gMouseX/gScale-(x+buttonSize)) / sizeX
+		gStorage.soundVolume = gClamp(far,0,1)
+	}
+	glText.draw((gStorage.soundVolume*100|0)+'%', x + buttonSize + sizeX+4, y+7)
+	
+	y+=35
+	
+	gl1.drawRect(x+buttonSize,y+buttonSize/2-sizeY/2-2,sizeX+2,sizeY+4,0x7F)
+	gl1.drawRect(x+buttonSize,y+buttonSize/2-sizeY/2,sizeX,sizeY,0x009adc7F)
+	gl1.drawRect(x+buttonSize+gStorage.musicVolume*(sizeX-4)-2,y+4,10,buttonSize-8,0x7F)
+	gl1.drawRect(x+buttonSize+gStorage.musicVolume*(sizeX-4),y+6,6,buttonSize-12,0x00c6f47F)
+	gl1.imageDraw(gMusicButtonDown,x,y,buttonSize,buttonSize)
+	if(gMouseDown && gMouseDownOnBox(x+buttonSize,y,sizeX,buttonSize)) {
+		var far = (gMouseX/gScale-(x+buttonSize)) / sizeX
+		gStorage.musicVolume = gClamp(far,0,1)
+	}
+	glText.draw((gStorage.musicVolume*100|0)+'%', x + buttonSize + sizeX+4, y+7)
+}
+
 var gAudioButtonsDraw = (x, y) => {
 	var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-	gl1.imageDraw(gStorage.musicOff=='1'?gMusicButton:gMusicButtonDown,x,y,gButtonSize,gButtonSize)
+	gl1.imageDraw(gStorage.musicVolume=='0'?gMusicButton:gMusicButtonDown,x,y,gButtonSize,gButtonSize)
 	if(gMouseClicked && onBox) {
 		gSoundButtonUpPlay()
-		gStorage.musicOff = gStorage.musicOff=='1'?0:1
-		if(gStorage.musicOff == '1') {
+		if(gStorage.musicVolume == '0') {
+			gStorage.musicVolume = '.5'
+			gMusicPlayTry()
+		} else {
+			gStorage.musicVolume = '0'
 			if(gMusicPlaying) {
 				gMusicPlaying.stop()
 				gMusicPlaying = u
 			}
-		} else {
-			gMusicPlayTry()
 		}
+		gLogDb('musicOff', gStorage.musicVolume)
 	}
 	x += gSize*3.5
 	var onBox = gMouseOnBox(x,y,gButtonSize,gButtonSize) && !gMouseDragged
-	gl1.imageDraw(gStorage.soundOff=='1'?gSoundsButton:gSoundsButtonDown,x,y,gButtonSize,gButtonSize)
+	gl1.imageDraw(gStorage.soundVolume=='0'?gSoundsButton:gSoundsButtonDown,x,y,gButtonSize,gButtonSize)
 	if(gMouseClicked && onBox) {
-		gStorage.soundOff = gStorage.soundOff=='1'?0:1
-		if(gStorage.soundOff=='0') {
+		if(gStorage.soundVolume == '0') {
+			gStorage.soundVolume='1'
 			gSoundButtonUpPlay()
+		} else {
+			gStorage.soundVolume='0'
 		}
+		gLogDb('soundOff', gStorage.soundVolume)
 	}
 	
 }
@@ -893,6 +981,7 @@ var glLoaded = () => {
 	gMusic = gSoundLoad("rock.mp3?"+gVersion)
 	gMenuMusic = gSoundLoad("menu.mp3?"+gVersion)
 	gSkiSound = gSoundLoad("ski.mp3?"+gVersion)
+	gLogDb('appLoad')
 }
 
 var gGuyDraw = (guy) => {
@@ -908,7 +997,13 @@ var gGuyDraw = (guy) => {
 	}
 	var add = guy.fell ? Math.floor(Math.sin(guy.fell/4*gPi)*22) : 0
 	image.rgb = 0xFFFFFF7F+add
+	if(guy.fake) {
+		image = guy.image
+		image.rgb = 0xFFFFFF00+Math.min(33,gRunLoops)
+	}
 	gl1.imageDraw(image, (guy.x-gCamX)*gSize, (guy.y-gCamY)*gSize - (guy.z*7),u,u,flip)
+	gYou.image0 = image
+	gYou.flip0 = flip
 }
 
 var gMouseDownOnBox = (x,y,sizeX,sizeY) => {
@@ -918,6 +1013,12 @@ var gMouseDownOnBox = (x,y,sizeX,sizeY) => {
 var gMouseOnBox = (x,y,sizeX,sizeY) => {
 	var mouseX = gMouseX/gScale
 	var mouseY = gMouseY/gScale
+	return mouseX>=x && mouseY>=y && mouseX<=x+sizeX && mouseY<=y+sizeY
+}
+
+var gMouseDownOnBox = (x,y,sizeX,sizeY) => {
+	var mouseX = gMouseDownX/gScale
+	var mouseY = gMouseDownY/gScale
 	return mouseX>=x && mouseY>=y && mouseX<=x+sizeX && mouseY<=y+sizeY
 }
 
@@ -931,6 +1032,10 @@ w.onload = () => {
 	gMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 	gl1.setup(gGameCanvas, "tex.png?10")
 
+	if(!gStorage.soundVolume) {
+		gStorage.soundVolume = 1
+		gStorage.musicVolume = .5
+	}
 	if(!gStorage.scoresLevel0) {
 		gStorage.scoresLevel0 = JSON.stringify([
 			{name: "Curtastic", score:2000},
@@ -1016,7 +1121,8 @@ w.onload = () => {
 		kind.texSizeY = kind.texSizeY||1
 		kind.image = gl1.imageMake(kind.texX*gSize, kind.texY*gSize, gSize, gSize*kind.texSizeY)
 	}
-
+	gTileKindsById['='].image.rgb = 0x0FFF907f
+	
 	glText.iconAdd("coin", gTileKindsById.c.image, 1)
 	glText.iconAdd("gate", gTileKindsById['>good'].image)
 	
@@ -1079,9 +1185,11 @@ w.onload = () => {
 		gMouseDownY = gMouseY
 		
 		gMusicPlayTry(1)
-		
-		e.preventDefault()
-		return false
+
+		if(!(e.target && e.target.tagName=='A')) {
+			e.preventDefault()
+			return false
+		}
 	}, {passive:false})
 	
 	document.addEventListener("touchmove", e => {
@@ -1101,8 +1209,10 @@ w.onload = () => {
 		
 		gMusicPlayTry()
 		
-		e.preventDefault()
-		return false
+		if(!(e.target && e.target.tagName=='A')) {
+			e.preventDefault()
+			return false
+		}
 	}, {passive:false})
 	
 	document.addEventListener("touchcancel", e => {
@@ -1213,13 +1323,12 @@ TTTTTT    TTTTTTTT
 TTTTTT      TtTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTT      TtTTTT
+TTTTTT T    TtTTTT
 TTTTTT      TTTTTT
-TTTTTT      TTTTTT
+TTTTTTT     TTTTTT
 TTTTTTTTTT> TTTTTT
-TTTTTTTTTTt TTTTTT
-TTTTTTTTTTt TTTTTT
-TTTTTTTTTTtcTTTTTT
+TTTTTT      TTTTTT
+TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT rrr  TTTTTT
@@ -1233,17 +1342,18 @@ TTTTTTrrr c TTTTTT
 TTTTTT      TTTTTT
 TTTTT r r   TTTTTT
 TTTTTr r r  TTTTTT
-TTTTTr r r  TTTTTT
-TTTTTT  c   TTTTTT
+TTTTTr rcr  TTTTTT
+TTTTTT      TTTTTT
 TTTTTTrrr   TTTTTT
-TTTTTTr r   TTTTTT
-TTTTTTrrrc  TTTTTT
+TTTTTTrcr   TTTTTT
+TTTTTTrrr   TTTTTT
+TTTTTTrc    TTTTTT
 TTTTTTr     TTTTTT
-TTTTTTr     TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
-TTTTTTrrrrrrTTTTTT
-TTTTTT      TTTTTT
+TTTTTT......TTTTTT
+TTTTTT......TTTTTT
+TTTTTT......TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
 TTTTTT      TTTTTT
@@ -1335,10 +1445,6 @@ TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
 TTTTT     TTTTTTTT
-TTTTTTTTTTTTTTTTTT
-TTTTTTTTTTTTTTTTTT
-TTTTTTTTTTTTTTTTTT
-TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
 TTTTTTTTTTTTTTTTTT
@@ -1556,10 +1662,10 @@ TTTTTttrrrrtTTTTTr
 	level.grid = `
 TTTTTT......TTTTTT
 TTTTTT......TTTTTT
-TTTTTT......TTTTT
+TTTTTT......TTTTTT
 TTTTTT......TTTTTT
 TTTTTT..  ..TTTTTT
-TTTTTT..  ..TTTTT
+TTTTTT..  ..TTTTTT
 TTTTTT..  ..TTTTTT
 TTTTTT.    .TTTTTT
 TTTTTT.    .TTTTTT
@@ -1759,9 +1865,20 @@ TTTTTTTTTTTTTTTTTT
 `
 
 	
-	gLevel = gLevels[1]
+	gLevel = gLevels[0]
 }
 
+
+var gTrailsDeleteOld = () => {
+	for(var i=-1,trail; trail=gTrails[++i];) {
+		if(trail.old){
+			gTrails.splice(i,1)
+			i--
+		} else {
+			trail.old = 1
+		}
+	}
+}
 
 var gReset = () => {
 	gYou.x = 9
@@ -1776,8 +1893,11 @@ var gReset = () => {
 	gYou.gateBads = 0
 	gYou.done = 0
 	gYou.coins = 0
+	gYou.image0 = gPlayerImage
+	gYou.flip0 = 0
 	gJumped = 0
 	gPauseTime = gPauseTimeTotal = 0
+	gRunLoops = 0
 	
 	var grid = gLevel.grid.split('\n')
 	grid.pop()
@@ -1799,3 +1919,19 @@ var gReset = () => {
 	
 }
 
+var gLogDb = (kind, message) => {
+	gAjax('log.php?refer='+encodeURIComponent(document.referrer)+'&kind='+kind+'&message='+encodeURIComponent(message||'')+'&level='+gLevels.indexOf(gLevel))
+}
+
+
+var gAjax = (url, f) => {
+	var protocol = 'https:'
+	var site = 'curtastic.'
+	if(window.location.host == 'localhost')
+		url=['http:','',"localhost","ski",url].join('/')
+	else
+		url = [protocol,'',site+"com","ski",url].join('/')
+	url += "&v="+gVersion
+	gLog('gAjax', url)
+	fetch(url).then(r=>r.text()).then(f)
+}
